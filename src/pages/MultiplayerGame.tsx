@@ -26,6 +26,9 @@ const MultiplayerGame = () => {
   const tom: Position = room ? (room.tom_pos as unknown as Position) : { x: 9, y: 0 };
   const exit: Position = room ? (room.exit_pos as unknown as Position) : { x: 9, y: 9 };
   const status = room?.status || "waiting";
+  const lastJerryDir = room?.last_jerry_direction as { dx: number; dy: number } | null;
+  const tomMoveCount = room?.tom_move_count ?? 0;
+  const TOM_MOVE_LIMIT = 50;
 
   const myRole = room
     ? room.host_id === user?.id
@@ -75,6 +78,10 @@ const MultiplayerGame = () => {
     if (nx < 0 || nx >= GRID_SIZE || ny < 0 || ny >= GRID_SIZE) return;
     if (grid[ny]?.[nx] === "wall") return;
 
+    if (myRole === "jerry") {
+      if (lastJerryDir && lastJerryDir.dx === dx && lastJerryDir.dy === dy) return;
+    }
+
     const newPos = { x: nx, y: ny };
     const otherPlayerId = getOtherPlayerId();
 
@@ -84,27 +91,30 @@ const MultiplayerGame = () => {
 
     if (myRole === "jerry") {
       update.jerry_pos = newPos;
-      // Check if Jerry reached exit
+      update.last_jerry_direction = { dx, dy };
       if (nx === exit.x && ny === exit.y) {
         update.status = "jerry_wins";
         update.current_turn = null;
       }
-      // Check if Jerry walked into Tom
       if (nx === tom.x && ny === tom.y) {
         update.status = "tom_wins";
         update.current_turn = null;
       }
     } else {
       update.tom_pos = newPos;
-      // Check if Tom caught Jerry
+      const newTomMoveCount = tomMoveCount + 1;
+      update.tom_move_count = newTomMoveCount;
       if (nx === jerry.x && ny === jerry.y) {
         update.status = "tom_wins";
+        update.current_turn = null;
+      } else if (newTomMoveCount >= TOM_MOVE_LIMIT) {
+        update.status = "jerry_wins";
         update.current_turn = null;
       }
     }
 
     await supabase.from("game_rooms").update(update).eq("id", room.id);
-  }, [isMyTurn, room, user, myRole, jerry, tom, exit, grid, getOtherPlayerId]);
+  }, [isMyTurn, room, user, myRole, jerry, tom, exit, grid, getOtherPlayerId, lastJerryDir, tomMoveCount]);
 
   // Keyboard controls
   useEffect(() => {
@@ -191,10 +201,13 @@ const MultiplayerGame = () => {
       </div>
 
       {/* Info */}
-      <div className="flex gap-6 mb-4 text-sm font-body text-muted-foreground">
+      <div className="flex flex-wrap gap-4 mb-4 text-sm font-body text-muted-foreground items-center justify-center">
         <span>🐭 = جيري</span>
         <span>🐱 = توم</span>
         <span>🏠 = المخرج</span>
+        {status === "playing" && (
+          <span className="text-primary">حركات توم: {tomMoveCount}/{TOM_MOVE_LIMIT}</span>
+        )}
       </div>
 
       {/* Grid */}

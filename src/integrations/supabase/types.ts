@@ -26,7 +26,9 @@ export type Database = {
           id: string
           invite_code: string
           jerry_pos: Json
+          last_jerry_direction: Json | null
           status: string
+          tom_move_count: number
           tom_pos: Json
           updated_at: string
         }
@@ -41,7 +43,9 @@ export type Database = {
           id?: string
           invite_code?: string
           jerry_pos?: Json
+          last_jerry_direction?: Json | null
           status?: string
+          tom_move_count?: number
           tom_pos?: Json
           updated_at?: string
         }
@@ -56,7 +60,9 @@ export type Database = {
           id?: string
           invite_code?: string
           jerry_pos?: Json
+          last_jerry_direction?: Json | null
           status?: string
+          tom_move_count?: number
           tom_pos?: Json
           updated_at?: string
         }

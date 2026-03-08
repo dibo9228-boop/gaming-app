@@ -11,7 +11,7 @@ import type { Tables } from "@/integrations/supabase/types";
 import { AchievementsDialog } from "@/components/AchievementsDialog";
 
 const GRID_SIZE = 10;
-const WALL_DENSITY = 0.2;
+const WALL_DENSITY = 0.1;
 
 type CellType = "empty" | "wall";
 
@@ -128,7 +128,7 @@ const GameLobby = () => {
         host_id: user.id,
         grid: grid as any,
         current_turn: user.id,
-        host_role: "jerry",
+        host_role: Math.random() < 0.5 ? "jerry" : "tom",
       })
       .select()
       .single();
