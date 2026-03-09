@@ -26,7 +26,9 @@ export type Database = {
           id: string
           invite_code: string
           jerry_pos: Json
+          join_policy: string
           last_jerry_direction: Json | null
+          last_jerry_streak: number
           status: string
           tom_move_count: number
           tom_pos: Json
@@ -43,7 +45,9 @@ export type Database = {
           id?: string
           invite_code?: string
           jerry_pos?: Json
+          join_policy?: string
           last_jerry_direction?: Json | null
+          last_jerry_streak?: number
           status?: string
           tom_move_count?: number
           tom_pos?: Json
@@ -60,11 +64,37 @@ export type Database = {
           id?: string
           invite_code?: string
           jerry_pos?: Json
+          join_policy?: string
           last_jerry_direction?: Json | null
+          last_jerry_streak?: number
           status?: string
           tom_move_count?: number
           tom_pos?: Json
           updated_at?: string
+        }
+        Relationships: []
+      }
+      game_invites: {
+        Row: {
+          id: string
+          room_id: string
+          from_user_id: string
+          to_user_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          room_id: string
+          from_user_id: string
+          to_user_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          room_id?: string
+          from_user_id?: string
+          to_user_id?: string
+          created_at?: string
         }
         Relationships: []
       }

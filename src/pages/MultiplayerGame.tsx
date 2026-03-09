@@ -1,11 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowRight, RotateCcw, Home } from "lucide-react";
+import { ArrowRight, RotateCcw, Home, Copy, Link as LinkIcon, Send, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
+import { generateMaze } from "@/lib/tomJerryMaze";
 
 const GRID_SIZE = 10;
 
@@ -17,8 +21,13 @@ const MultiplayerGame = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [room, setRoom] = useState<GameRoom | null>(null);
   const [loading, setLoading] = useState(true);
+  const [resetting, setResetting] = useState(false);
+  const [inviteUsername, setInviteUsername] = useState("");
+  const [sendingInvite, setSendingInvite] = useState(false);
+  const [copiedForRoomId, setCopiedForRoomId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const grid: CellType[][] = room ? (room.grid as CellType[][]) : [];
@@ -27,6 +36,7 @@ const MultiplayerGame = () => {
   const exit: Position = room ? (room.exit_pos as unknown as Position) : { x: 9, y: 9 };
   const status = room?.status || "waiting";
   const lastJerryDir = room?.last_jerry_direction as { dx: number; dy: number } | null;
+  const lastJerryStreak = room?.last_jerry_streak ?? 0;
   const tomMoveCount = room?.tom_move_count ?? 0;
   const TOM_MOVE_LIMIT = 50;
 
@@ -68,6 +78,89 @@ const MultiplayerGame = () => {
     return room.host_id === user.id ? room.guest_id : room.host_id;
   }, [room, user]);
 
+  const copyCode = useCallback((code: string) => {
+    navigator.clipboard.writeText(code);
+    if (room) {
+      setCopiedForRoomId(room.id);
+      setTimeout(() => setCopiedForRoomId(null), 2000);
+    }
+    toast({ title: "تم نسخ الكود" });
+  }, [room, toast]);
+
+  const copyLink = useCallback((code: string) => {
+    const url = `${window.location.origin}/game/tom-and-jerry/lobby?join=${encodeURIComponent(code)}`;
+    navigator.clipboard.writeText(url);
+    if (room) {
+      setCopiedForRoomId(room.id);
+      setTimeout(() => setCopiedForRoomId(null), 2000);
+    }
+    toast({ title: "تم نسخ الرابط", description: "شارك الرابط مع صاحبك" });
+  }, [room, toast]);
+
+  const sendInvite = useCallback(async () => {
+    if (!room || !user || !inviteUsername.trim()) return;
+    setSendingInvite(true);
+    try {
+      const term = inviteUsername.trim();
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, display_name")
+        .ilike("display_name", `%${term}%`)
+        .limit(5);
+      const exact = profiles?.find((p) => p.display_name?.toLowerCase() === term.toLowerCase());
+      const toUserId = (exact ?? profiles?.[0])?.user_id;
+      if (!toUserId) {
+        toast({ title: "خطأ", description: "ما في مستخدم بهذا الاسم", variant: "destructive" });
+        return;
+      }
+      if (toUserId === user.id) {
+        toast({ title: "خطأ", description: "ما تقدر تدعي نفسك", variant: "destructive" });
+        return;
+      }
+      const { error } = await supabase.from("game_invites").insert({
+        room_id: room.id,
+        from_user_id: user.id,
+        to_user_id: toUserId,
+      });
+      if (error) throw error;
+      toast({ title: "تم إرسال الدعوة!" });
+      setInviteUsername("");
+    } catch (e: any) {
+      toast({ title: "خطأ", description: e.message || "فشل إرسال الدعوة", variant: "destructive" });
+    } finally {
+      setSendingInvite(false);
+    }
+  }, [room, user, inviteUsername, toast]);
+
+  const updateJoinPolicy = useCallback(async (join_policy: "anyone" | "invite_only") => {
+    if (!room || !roomId || room.host_id !== user?.id) return;
+    await supabase.from("game_rooms").update({ join_policy }).eq("id", room.id);
+    toast({ title: "تم التحديث" });
+  }, [room, roomId, user, toast]);
+
+  const resetRoomAndPlayAgain = useCallback(async () => {
+    if (!room || !roomId || !user) return;
+    if (room.host_id !== user.id && room.guest_id !== user.id) return;
+    setResetting(true);
+    const grid = generateMaze();
+    const { error } = await supabase
+      .from("game_rooms")
+      .update({
+        grid: grid as any,
+        jerry_pos: { x: 0, y: 0 },
+        tom_pos: { x: GRID_SIZE - 1, y: 0 },
+        exit_pos: { x: GRID_SIZE - 1, y: GRID_SIZE - 1 },
+        status: "playing",
+        current_turn: room.host_id,
+        tom_move_count: 0,
+        last_jerry_direction: null,
+        last_jerry_streak: 0,
+      })
+      .eq("id", room.id);
+    setResetting(false);
+    if (error) toast({ title: "خطأ", description: error.message, variant: "destructive" });
+  }, [room, roomId, user, toast]);
+
   const move = useCallback(async (dx: number, dy: number) => {
     if (!isMyTurn || !room || !user) return;
 
@@ -78,10 +171,6 @@ const MultiplayerGame = () => {
     if (nx < 0 || nx >= GRID_SIZE || ny < 0 || ny >= GRID_SIZE) return;
     if (grid[ny]?.[nx] === "wall") return;
 
-    if (myRole === "jerry") {
-      if (lastJerryDir && lastJerryDir.dx === dx && lastJerryDir.dy === dy) return;
-    }
-
     const newPos = { x: nx, y: ny };
     const otherPlayerId = getOtherPlayerId();
 
@@ -90,8 +179,13 @@ const MultiplayerGame = () => {
     };
 
     if (myRole === "jerry") {
+      const sameDir = lastJerryDir && lastJerryDir.dx === dx && lastJerryDir.dy === dy;
+      const newStreak = sameDir ? lastJerryStreak + 1 : 1;
+      if (sameDir && lastJerryStreak >= 2) return;
+
       update.jerry_pos = newPos;
       update.last_jerry_direction = { dx, dy };
+      update.last_jerry_streak = newStreak;
       if (nx === exit.x && ny === exit.y) {
         update.status = "jerry_wins";
         update.current_turn = null;
@@ -114,7 +208,7 @@ const MultiplayerGame = () => {
     }
 
     await supabase.from("game_rooms").update(update).eq("id", room.id);
-  }, [isMyTurn, room, user, myRole, jerry, tom, exit, grid, getOtherPlayerId, lastJerryDir, tomMoveCount]);
+  }, [isMyTurn, room, user, myRole, jerry, tom, exit, grid, getOtherPlayerId, lastJerryDir, lastJerryStreak, tomMoveCount]);
 
   // Keyboard controls
   useEffect(() => {
@@ -199,6 +293,69 @@ const MultiplayerGame = () => {
          gameOver ? (status === "jerry_wins" ? "🐭 جيري ربح!" : "🐱 توم ربح!") :
          isMyTurn ? "⚡ دورك!" : "⏳ دور الخصم..."}
       </div>
+
+      {/* Invite controls inside room (host only, waiting state) */}
+      {status === "waiting" && room && user && room.host_id === user.id && (
+        <div className="w-full max-w-lg mb-4 bg-card border border-border rounded-lg p-3 space-y-2">
+          <p className="text-xs font-body text-muted-foreground">
+            شارك الغرفة مع صاحبك باستخدام الكود أو الرابط أو دعوة باسم المستخدم.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground font-body">كود:</span>
+            <code className="text-xs text-primary bg-muted px-2 py-1 rounded">{room.invite_code}</code>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1"
+              onClick={() => copyCode(room.invite_code)}
+            >
+              {copiedForRoomId === room.id ? <Check className="w-3 h-3 text-primary" /> : <Copy className="w-3 h-3" />}
+              نسخ الكود
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1"
+              onClick={() => copyLink(room.invite_code)}
+            >
+              {copiedForRoomId === room.id ? <Check className="w-3 h-3 text-primary" /> : <LinkIcon className="w-3 h-3" />}
+              نسخ الرابط
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              placeholder="اسم اللاعب للدعوة"
+              value={inviteUsername}
+              onChange={(e) => setInviteUsername(e.target.value)}
+              className="bg-muted border-border text-foreground max-w-[180px] h-8 text-xs"
+            />
+            <Button
+              size="sm"
+              className="h-8 gap-1"
+              disabled={sendingInvite}
+              onClick={sendInvite}
+            >
+              <Send className="w-3 h-3" />
+              إرسال دعوة
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
+            <span className="text-xs text-muted-foreground font-body">من يمكنه الانضمام:</span>
+            <Select
+              value={room.join_policy ?? "anyone"}
+              onValueChange={(v) => updateJoinPolicy(v as "anyone" | "invite_only")}
+            >
+              <SelectTrigger className="w-[160px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="anyone">أي شخص لديه الكود</SelectItem>
+                <SelectItem value="invite_only">المدعوين فقط</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
 
       {/* Info */}
       <div className="flex flex-wrap gap-4 mb-4 text-sm font-body text-muted-foreground items-center justify-center">
@@ -292,9 +449,12 @@ const MultiplayerGame = () => {
               <p className="text-muted-foreground font-body mb-6">
                 {status === "jerry_wins" ? "جيري هرب بنجاح! 🐭✨" : "توم لقط جيري! 🐱"}
               </p>
-              <div className="flex gap-3 justify-center">
-                <Button onClick={() => navigate("/game/tom-and-jerry/lobby")} className="gap-2">
-                  <RotateCcw className="w-4 h-4" /> العب مرة تانية
+              <div className="flex gap-3 justify-center flex-wrap">
+                <Button onClick={resetRoomAndPlayAgain} disabled={resetting} className="gap-2">
+                  <RotateCcw className="w-4 h-4" /> {resetting ? "جاري..." : "العب مرة تانية"}
+                </Button>
+                <Button variant="outline" onClick={() => navigate("/game/tom-and-jerry/lobby")} className="gap-2">
+                  <Home className="w-4 h-4" /> اللوبي
                 </Button>
                 <Button variant="outline" onClick={() => navigate("/")}>
                   <ArrowRight className="w-4 h-4 ml-1" /> الرئيسية

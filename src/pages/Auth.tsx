@@ -26,19 +26,24 @@ const Auth = () => {
         if (error) throw error;
         navigate("/");
       } else {
+        // Create account without requiring email confirmation.
+        // In Supabase Dashboard: Authentication → Providers → Email → turn OFF "Confirm email"
+        // so users can log in immediately after sign up.
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             data: { display_name: displayName },
-            emailRedirectTo: window.location.origin,
+            // emailRedirectTo only used if you enable email confirmation later
+            // emailRedirectTo: window.location.origin,
           },
         });
         if (error) throw error;
         toast({
           title: "تم إنشاء الحساب!",
-          description: "تحقق من بريدك الإلكتروني لتأكيد الحساب",
+          description: "سجّل الدخول الآن بالبريد وكلمة المرور",
         });
+        navigate("/");
       }
     } catch (error: any) {
       toast({
