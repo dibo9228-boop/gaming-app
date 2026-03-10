@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
 import { Home, Plus, Link2, LogOut, Gamepad2, Copy, Check, Trophy, Link, Send, Info, Trash2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+
+import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { useApiAction } from "@/hooks/use-api-action";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { AchievementsDialog } from "@/components/AchievementsDialog";
 import { generateMaze, GRID_SIZE } from "@/lib/tomJerryMaze";
 import {
@@ -42,19 +44,21 @@ type InviteWithDetails = Tables<"game_invites"> & {
 };
 
 const LOBBY_PATH = "/game/tom-and-jerry/lobby";
+const getErrorMessage = (error: unknown, fallback = "حدث خطأ غير متوقع") =>
+  error instanceof Error ? error.message : fallback;
 
 const GameLobby = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
+
   const [inviteCode, setInviteCode] = useState("");
   const [myRooms, setMyRooms] = useState<Tables<"game_rooms">[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [totalXp, setTotalXp] = useState<number | null>(null);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
   const [inviteUsername, setInviteUsername] = useState("");
-  const [sendingInvite, setSendingInvite] = useState(false);
   const [invites, setInvites] = useState<InviteWithDetails[]>([]);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsRoom, setDetailsRoom] = useState<Tables<"game_rooms"> | null>(null);
@@ -63,6 +67,144 @@ const GameLobby = () => {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [roomToDelete, setRoomToDelete] = useState<Tables<"game_rooms"> | null>(null);
+
+  // --- API actions wrapped with loading ---
+
+  const {
+    run: createRoomAction,
+    loading: creatingRoom,
+  } = useApiAction(async () => {
+    if (!user) throw new Error("مطلوب تسجيل الدخول");
+    const grid = generateMaze();
+    const { data, error } = await supabase
+      .from("game_rooms")
+      .insert({
+        host_id: user.id,
+        grid,
+        current_turn: user.id,
+        host_role: Math.random() < 0.5 ? "jerry" : "tom",
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    toast({ title: "تم إنشاء الغرفة!", description: "شارك كود الدعوة مع صاحبك" });
+    navigate(`/game/tom-and-jerry/multi/${data.id}`);
+  });
+
+  const {
+    run: joinRoomByCodeAction,
+    loading: joiningRoom,
+  } = useApiAction(async (code: string) => {
+    if (!user || !code.trim()) throw new Error("أدخل الكود أولاً");
+    const { data: room, error: findErr } = await supabase
+      .from("game_rooms")
+      .select("*")
+      .eq("invite_code", code.trim())
+      .eq("status", "waiting")
+      .single();
+
+    if (findErr || !room) throw new Error("الكود غير صحيح أو الغرفة مش متاحة");
+    if (room.host_id === user.id) throw new Error("ما بتقدر تنضم لغرفتك");
+
+    if (room.join_policy === "invite_only") {
+      const { data: invite } = await supabase
+        .from("game_invites")
+        .select("id")
+        .eq("room_id", room.id)
+        .eq("to_user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+      if (!invite) {
+        throw new Error("هذه الغرفة بالدعوة فقط. اطلب من صاحب الغرفة إرسال دعوة لك.");
+      }
+    }
+
+    const { error } = await supabase
+      .from("game_rooms")
+      .update({ guest_id: user.id, status: "playing", current_turn: room.host_id })
+      .eq("id", room.id);
+    if (error) throw error;
+    navigate(`/game/tom-and-jerry/multi/${room.id}`);
+  });
+
+  const {
+    run: sendInviteAction,
+    loading: sendingInvite,
+  } = useApiAction(async (roomId: string) => {
+    if (!user || !inviteUsername.trim()) throw new Error("أدخل اسم المستخدم أولاً");
+    const term = inviteUsername.trim();
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("user_id, display_name")
+      .ilike("display_name", `%${term}%`)
+      .limit(5);
+
+    const exact = profiles?.find((p) => p.display_name?.toLowerCase() === term.toLowerCase());
+    const toUserId = (exact ?? profiles?.[0])?.user_id;
+    if (!toUserId) throw new Error("ما في مستخدم بهذا الاسم");
+    if (toUserId === user.id) throw new Error("ما تقدر تدعي نفسك");
+
+    const { error } = await supabase.from("game_invites").insert({
+      room_id: roomId,
+      from_user_id: user.id,
+      to_user_id: toUserId,
+    });
+    if (error) throw error;
+
+    setInviteUsername("");
+    await fetchInvites();
+    toast({ title: "تم إرسال الدعوة!" });
+  });
+
+  const {
+    run: resetRoomAction,
+    loading: resettingRoom,
+  } = useApiAction(async (room: Tables<"game_rooms">) => {
+    if (!user || (room.host_id !== user.id && room.guest_id !== user.id)) return;
+    const grid = generateMaze();
+    const { error } = await supabase
+      .from("game_rooms")
+      .update({
+        grid,
+        jerry_pos: { x: 0, y: 0 },
+        tom_pos: { x: GRID_SIZE - 1, y: 0 },
+        exit_pos: { x: GRID_SIZE - 1, y: GRID_SIZE - 1 },
+        status: "playing",
+        current_turn: room.host_id,
+        tom_move_count: 0,
+        last_jerry_direction: null,
+        last_jerry_streak: 0,
+      })
+      .eq("id", room.id);
+    if (error) throw error;
+    toast({ title: "تم إعادة الغرفة!" });
+    await fetchRooms();
+    navigate(`/game/tom-and-jerry/multi/${room.id}`);
+  });
+
+  const {
+    run: updateJoinPolicyAction,
+    loading: updatingJoinPolicy,
+  } = useApiAction(async (roomId: string, join_policy: "anyone" | "invite_only") => {
+    if (!user) throw new Error("مطلوب تسجيل الدخول");
+    const { error } = await supabase.from("game_rooms").update({ join_policy }).eq("id", roomId).eq("host_id", user.id);
+    if (error) throw error;
+    toast({ title: "تم التحديث" });
+    if (detailsRoom?.id === roomId) setDetailsRoom((r) => (r ? { ...r, join_policy } : null));
+    await fetchRooms();
+  });
+
+  const {
+    run: deleteRoomAction,
+    loading: deletingRoom,
+  } = useApiAction(async (roomId: string) => {
+    if (!user) throw new Error("مطلوب تسجيل الدخول");
+    const { error } = await supabase.from("game_rooms").delete().eq("id", roomId).eq("host_id", user.id);
+    if (error) throw error;
+    toast({ title: "تم حذف الغرفة" });
+    await fetchRooms();
+  });
 
   // Pre-fill invite code from link ?join=CODE
   useEffect(() => {
@@ -78,7 +220,7 @@ const GameLobby = () => {
     if (!user) return;
     supabase.from("profiles").select("total_xp").eq("user_id", user.id).single()
       .then(({ data }) => setTotalXp(data?.total_xp ?? 0));
-  }, [user?.id]);
+  }, [user]);
 
   const fetchRooms = useCallback(async () => {
     if (!user) return;
@@ -89,7 +231,7 @@ const GameLobby = () => {
       .in("status", ["waiting", "playing", "jerry_wins", "tom_wins"])
       .order("created_at", { ascending: false });
     if (data) setMyRooms(data);
-  }, [user?.id]);
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -99,7 +241,7 @@ const GameLobby = () => {
       .channel("lobby-rooms")
       .on("postgres_changes", { event: "*", schema: "public", table: "game_rooms" }, (payload) => {
         fetchRooms();
-        const updated = payload.new as any;
+        const updated = payload.new as Tables<"game_rooms"> | null;
         if (updated && updated.host_id === user.id && updated.status === "playing" && updated.guest_id) {
           navigate(`/game/tom-and-jerry/multi/${updated.id}`);
         }
@@ -131,7 +273,7 @@ const GameLobby = () => {
         from_display_name: profiles.get(inv.from_user_id) || "?",
       }))
     );
-  }, [user?.id]);
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -143,31 +285,15 @@ const GameLobby = () => {
     return () => { supabase.removeChannel(ch); };
   }, [user, fetchInvites]);
 
-  const createRoom = async () => {
-    if (!user) return;
-    const grid = generateMaze();
-    const { data, error } = await supabase
-      .from("game_rooms")
-      .insert({
-        host_id: user.id,
-        grid: grid as any,
-        current_turn: user.id,
-        host_role: Math.random() < 0.5 ? "jerry" : "tom",
-      })
-      .select()
-      .single();
+  const createRoom = () =>
+    createRoomAction().catch((error: unknown) =>
+      toast({ title: "خطأ", description: getErrorMessage(error), variant: "destructive" })
+    );
 
-    if (error) {
-      toast({ title: "خطأ", description: error.message, variant: "destructive" });
-      return;
-    }
-    if (data) {
-      toast({ title: "تم إنشاء الغرفة!", description: "شارك كود الدعوة مع صاحبك" });
-      navigate(`/game/tom-and-jerry/multi/${data.id}`);
-    }
-  };
-
-  const joinRoom = () => joinRoomByCode(inviteCode);
+  const joinRoom = () =>
+    joinRoomByCodeAction(inviteCode).catch((error: unknown) =>
+      toast({ title: "خطأ", description: getErrorMessage(error), variant: "destructive" })
+    );
 
   const copyCode = (code: string, id: string) => {
     navigator.clipboard.writeText(code);
@@ -184,41 +310,10 @@ const GameLobby = () => {
     toast({ title: "تم نسخ الرابط", description: "شارك الرابط مع صاحبك" });
   };
 
-  const sendInvite = async (roomId: string, code: string) => {
-    if (!user || !inviteUsername.trim()) return;
-    setSendingInvite(true);
-    try {
-      const term = inviteUsername.trim();
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, display_name")
-        .ilike("display_name", `%${term}%`)
-        .limit(5);
-      const exact = profiles?.find((p) => p.display_name?.toLowerCase() === term.toLowerCase());
-      const toUserId = (exact ?? profiles?.[0])?.user_id;
-      if (!toUserId) {
-        toast({ title: "خطأ", description: "ما في مستخدم بهذا الاسم", variant: "destructive" });
-        return;
-      }
-      if (toUserId === user.id) {
-        toast({ title: "خطأ", description: "ما تقدر تدعي نفسك", variant: "destructive" });
-        return;
-      }
-      const { error } = await supabase.from("game_invites").insert({
-        room_id: roomId,
-        from_user_id: user.id,
-        to_user_id: toUserId,
-      });
-      if (error) throw error;
-      toast({ title: "تم إرسال الدعوة!" });
-      setInviteUsername("");
-      fetchInvites();
-    } catch (e: any) {
-      toast({ title: "خطأ", description: e.message || "فشل إرسال الدعوة", variant: "destructive" });
-    } finally {
-      setSendingInvite(false);
-    }
-  };
+  const sendInvite = (roomId: string) =>
+    sendInviteAction(roomId).catch((error: unknown) =>
+      toast({ title: "خطأ", description: getErrorMessage(error, "فشل إرسال الدعوة"), variant: "destructive" })
+    );
 
   const acceptInvite = async (inv: InviteWithDetails) => {
     if (!user || !inv.room) return;
@@ -238,45 +333,10 @@ const GameLobby = () => {
     joinRoomByCode(inv.room.invite_code);
   };
 
-  const joinRoomByCode = async (code: string) => {
-    if (!user || !code.trim()) return;
-    const { data: room, error: findErr } = await supabase
-      .from("game_rooms")
-      .select("*")
-      .eq("invite_code", code.trim())
-      .eq("status", "waiting")
-      .single();
-    if (findErr || !room) {
-      toast({ title: "خطأ", description: "الكود غير صحيح أو الغرفة مش متاحة", variant: "destructive" });
-      return;
-    }
-    if (room.host_id === user.id) {
-      toast({ title: "خطأ", description: "ما بتقدر تنضم لغرفتك", variant: "destructive" });
-      return;
-    }
-    if (room.join_policy === "invite_only") {
-      const { data: invite } = await supabase
-        .from("game_invites")
-        .select("id")
-        .eq("room_id", room.id)
-        .eq("to_user_id", user.id)
-        .limit(1)
-        .maybeSingle();
-      if (!invite) {
-        toast({ title: "خطأ", description: "هذه الغرفة بالدعوة فقط. اطلب من صاحب الغرفة إرسال دعوة لك.", variant: "destructive" });
-        return;
-      }
-    }
-    const { error } = await supabase
-      .from("game_rooms")
-      .update({ guest_id: user.id, status: "playing", current_turn: room.host_id })
-      .eq("id", room.id);
-    if (error) {
-      toast({ title: "خطأ", description: error.message, variant: "destructive" });
-      return;
-    }
-    navigate(`/game/tom-and-jerry/multi/${room.id}`);
-  };
+  const joinRoomByCode = (code: string) =>
+    joinRoomByCodeAction(code).catch((error: unknown) =>
+      toast({ title: "خطأ", description: getErrorMessage(error), variant: "destructive" })
+    );
 
   const dismissInvite = async (inviteId: string) => {
     await supabase.from("game_invites").delete().eq("id", inviteId);
@@ -332,61 +392,36 @@ const GameLobby = () => {
     setDetailsGuestName(null);
   }, []);
 
-  const updateJoinPolicy = useCallback(async (roomId: string, join_policy: "anyone" | "invite_only") => {
-    const { error } = await supabase.from("game_rooms").update({ join_policy }).eq("id", roomId).eq("host_id", user!.id);
-    if (error) {
-      toast({ title: "خطأ", description: error.message, variant: "destructive" });
-      return;
-    }
-    toast({ title: "تم التحديث" });
-    if (detailsRoom?.id === roomId) setDetailsRoom((r) => (r ? { ...r, join_policy } : null));
-    fetchRooms();
-  }, [user, detailsRoom, fetchRooms, toast]);
+  const updateJoinPolicy = useCallback(
+    (roomId: string, join_policy: "anyone" | "invite_only") =>
+      updateJoinPolicyAction(roomId, join_policy).catch((error: unknown) =>
+        toast({ title: "خطأ", description: getErrorMessage(error), variant: "destructive" })
+      ),
+    []
+  );
 
   const confirmDeleteRoom = useCallback((room: Tables<"game_rooms">) => {
     setRoomToDelete(room);
     setDeleteConfirmOpen(true);
   }, []);
 
-  const deleteRoom = useCallback(async () => {
-    if (!roomToDelete || !user || roomToDelete.host_id !== user.id) return;
-    const { error } = await supabase.from("game_rooms").delete().eq("id", roomToDelete.id);
+  const deleteRoom = useCallback(() => {
+    if (!roomToDelete) return;
     setDeleteConfirmOpen(false);
-    setRoomToDelete(null);
-    closeDetails();
-    if (error) {
-      toast({ title: "خطأ", description: error.message, variant: "destructive" });
-      return;
-    }
-    toast({ title: "تم حذف الغرفة" });
-    fetchRooms();
-  }, [roomToDelete, user, closeDetails, fetchRooms, toast]);
+    deleteRoomAction(roomToDelete.id)
+      .catch((error: unknown) =>
+        toast({ title: "خطأ", description: getErrorMessage(error), variant: "destructive" })
+      )
+      .finally(() => {
+        setRoomToDelete(null);
+        closeDetails();
+      });
+  }, [roomToDelete]);
 
-  const resetRoom = async (room: Tables<"game_rooms">) => {
-    if (!user || (room.host_id !== user.id && room.guest_id !== user.id)) return;
-    const grid = generateMaze();
-    const { error } = await supabase
-      .from("game_rooms")
-      .update({
-        grid: grid as any,
-        jerry_pos: { x: 0, y: 0 },
-        tom_pos: { x: GRID_SIZE - 1, y: 0 },
-        exit_pos: { x: GRID_SIZE - 1, y: GRID_SIZE - 1 },
-        status: "playing",
-        current_turn: room.host_id,
-        tom_move_count: 0,
-        last_jerry_direction: null,
-        last_jerry_streak: 0,
-      })
-      .eq("id", room.id);
-    if (error) {
-      toast({ title: "خطأ", description: error.message, variant: "destructive" });
-      return;
-    }
-    toast({ title: "تم إعادة الغرفة!" });
-    fetchRooms();
-    navigate(`/game/tom-and-jerry/multi/${room.id}`);
-  };
+  const resetRoom = (room: Tables<"game_rooms">) =>
+    resetRoomAction(room).catch((error: unknown) =>
+      toast({ title: "خطأ", description: getErrorMessage(error), variant: "destructive" })
+    );
 
   return (
     <div className="min-h-screen bg-background py-6 px-4" dir="rtl">
@@ -446,7 +481,9 @@ const GameLobby = () => {
               <h2 className="text-sm arcade-text text-foreground">إنشاء غرفة</h2>
             </div>
             <p className="text-sm text-muted-foreground font-body mb-4">أنشئ غرفة وادعي صاحبك يلعب معك</p>
-            <Button onClick={createRoom} variant="secondary" className="w-full">إنشاء غرفة 🎮</Button>
+            <Button onClick={createRoom} variant="secondary" className="w-full" disabled={creatingRoom}>
+              {creatingRoom ? "جاري الإنشاء..." : "إنشاء غرفة 🎮"}
+            </Button>
           </motion.div>
 
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
@@ -463,7 +500,9 @@ const GameLobby = () => {
                 onChange={(e) => setInviteCode(e.target.value)}
                 className="bg-muted border-border text-foreground flex-1 min-w-[120px]"
               />
-              <Button onClick={joinRoom} variant="outline">انضم</Button>
+              <Button onClick={joinRoom} variant="outline" disabled={joiningRoom}>
+                {joiningRoom ? "جاري الانضمام..." : "انضم"}
+              </Button>
               <Button onClick={viewDetailsByCode} variant="ghost" size="sm" className="gap-1">
                 <Info className="w-4 h-4" /> عرض التفاصيل
               </Button>
@@ -562,8 +601,13 @@ const GameLobby = () => {
                           onChange={(e) => setInviteUsername(e.target.value)}
                           className="bg-muted border-border text-foreground max-w-[160px] h-8 text-xs"
                         />
-                        <Button size="sm" className="h-8 gap-1" disabled={sendingInvite} onClick={() => sendInvite(room.id, room.invite_code)}>
-                          <Send className="w-3 h-3" /> إرسال دعوة
+                        <Button
+                          size="sm"
+                          className="h-8 gap-1"
+                          disabled={sendingInvite}
+                          onClick={() => sendInvite(room.id)}
+                        >
+                          <Send className="w-3 h-3" /> {sendingInvite ? "جاري الإرسال..." : "إرسال دعوة"}
                         </Button>
                       </div>
                     </div>

@@ -2,13 +2,15 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, RotateCcw, Home, Copy, Link as LinkIcon, Send, Check } from "lucide-react";
+
+import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { useApiAction } from "@/hooks/use-api-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
-import type { Tables } from "@/integrations/supabase/types";
 import { generateMaze } from "@/lib/tomJerryMaze";
 
 const GRID_SIZE = 10;
@@ -24,9 +26,7 @@ const MultiplayerGame = () => {
   const { toast } = useToast();
   const [room, setRoom] = useState<GameRoom | null>(null);
   const [loading, setLoading] = useState(true);
-  const [resetting, setResetting] = useState(false);
   const [inviteUsername, setInviteUsername] = useState("");
-  const [sendingInvite, setSendingInvite] = useState(false);
   const [copiedForRoomId, setCopiedForRoomId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -47,6 +47,68 @@ const MultiplayerGame = () => {
     : null;
 
   const isMyTurn = room?.current_turn === user?.id && status === "playing";
+
+  // API actions with loading state
+
+  const {
+    run: sendInviteAction,
+    loading: sendingInvite,
+  } = useApiAction(async () => {
+    if (!room || !user || !inviteUsername.trim()) return;
+    const term = inviteUsername.trim();
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("user_id, display_name")
+      .ilike("display_name", `%${term}%`)
+      .limit(5);
+    const exact = profiles?.find((p) => p.display_name?.toLowerCase() === term.toLowerCase());
+    const toUserId = (exact ?? profiles?.[0])?.user_id;
+    if (!toUserId) throw new Error("ما في مستخدم بهذا الاسم");
+    if (toUserId === user.id) throw new Error("ما تقدر تدعي نفسك");
+
+    const { error } = await supabase.from("game_invites").insert({
+      room_id: room.id,
+      from_user_id: user.id,
+      to_user_id: toUserId,
+    });
+    if (error) throw error;
+    toast({ title: "تم إرسال الدعوة!" });
+    setInviteUsername("");
+  });
+
+  const {
+    run: updateJoinPolicyAction,
+    loading: updatingJoinPolicy,
+  } = useApiAction(async (join_policy: "anyone" | "invite_only") => {
+    if (!room || !roomId || room.host_id !== user?.id) return;
+    const { error } = await supabase.from("game_rooms").update({ join_policy }).eq("id", room.id);
+    if (error) throw error;
+    toast({ title: "تم التحديث" });
+  });
+
+  const {
+    run: resetRoomAction,
+    loading: resetting,
+  } = useApiAction(async () => {
+    if (!room || !roomId || !user) return;
+    if (room.host_id !== user.id && room.guest_id !== user.id) return;
+    const grid = generateMaze();
+    const { error } = await supabase
+      .from("game_rooms")
+      .update({
+        grid: grid as any,
+        jerry_pos: { x: 0, y: 0 },
+        tom_pos: { x: GRID_SIZE - 1, y: 0 },
+        exit_pos: { x: GRID_SIZE - 1, y: GRID_SIZE - 1 },
+        status: "playing",
+        current_turn: room.host_id,
+        tom_move_count: 0,
+        last_jerry_direction: null,
+        last_jerry_streak: 0,
+      })
+      .eq("id", room.id);
+    if (error) throw error;
+  });
 
   // Fetch room
   useEffect(() => {
@@ -97,69 +159,25 @@ const MultiplayerGame = () => {
     toast({ title: "تم نسخ الرابط", description: "شارك الرابط مع صاحبك" });
   }, [room, toast]);
 
-  const sendInvite = useCallback(async () => {
-    if (!room || !user || !inviteUsername.trim()) return;
-    setSendingInvite(true);
-    try {
-      const term = inviteUsername.trim();
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, display_name")
-        .ilike("display_name", `%${term}%`)
-        .limit(5);
-      const exact = profiles?.find((p) => p.display_name?.toLowerCase() === term.toLowerCase());
-      const toUserId = (exact ?? profiles?.[0])?.user_id;
-      if (!toUserId) {
-        toast({ title: "خطأ", description: "ما في مستخدم بهذا الاسم", variant: "destructive" });
-        return;
-      }
-      if (toUserId === user.id) {
-        toast({ title: "خطأ", description: "ما تقدر تدعي نفسك", variant: "destructive" });
-        return;
-      }
-      const { error } = await supabase.from("game_invites").insert({
-        room_id: room.id,
-        from_user_id: user.id,
-        to_user_id: toUserId,
-      });
-      if (error) throw error;
-      toast({ title: "تم إرسال الدعوة!" });
-      setInviteUsername("");
-    } catch (e: any) {
-      toast({ title: "خطأ", description: e.message || "فشل إرسال الدعوة", variant: "destructive" });
-    } finally {
-      setSendingInvite(false);
-    }
-  }, [room, user, inviteUsername, toast]);
+  const sendInvite = useCallback(() => {
+    sendInviteAction().catch((e: any) =>
+      toast({ title: "خطأ", description: e.message || "فشل إرسال الدعوة", variant: "destructive" })
+    );
+  }, []);
 
-  const updateJoinPolicy = useCallback(async (join_policy: "anyone" | "invite_only") => {
-    if (!room || !roomId || room.host_id !== user?.id) return;
-    await supabase.from("game_rooms").update({ join_policy }).eq("id", room.id);
-    toast({ title: "تم التحديث" });
-  }, [room, roomId, user, toast]);
+  const updateJoinPolicy = useCallback(
+    (join_policy: "anyone" | "invite_only") =>
+      updateJoinPolicyAction(join_policy).catch((e: any) =>
+        toast({ title: "خطأ", description: e.message || "فشل التحديث", variant: "destructive" })
+      ),
+    []
+  );
 
-  const resetRoomAndPlayAgain = useCallback(async () => {
-    if (!room || !roomId || !user) return;
-    if (room.host_id !== user.id && room.guest_id !== user.id) return;
-    setResetting(true);
-    const grid = generateMaze();
-    const { error } = await supabase
-      .from("game_rooms")
-      .update({
-        grid: grid as any,
-        jerry_pos: { x: 0, y: 0 },
-        tom_pos: { x: GRID_SIZE - 1, y: 0 },
-        exit_pos: { x: GRID_SIZE - 1, y: GRID_SIZE - 1 },
-        status: "playing",
-        current_turn: room.host_id,
-        tom_move_count: 0,
-        last_jerry_direction: null,
-        last_jerry_streak: 0,
-      })
-      .eq("id", room.id);
-    setResetting(false);
-    if (error) toast({ title: "خطأ", description: error.message, variant: "destructive" });
-  }, [room, roomId, user, toast]);
+  const resetRoomAndPlayAgain = useCallback(() => {
+    resetRoomAction().catch((e: any) =>
+      toast({ title: "خطأ", description: e.message || "فشل إعادة الغرفة", variant: "destructive" })
+    );
+  }, []);
 
   const move = useCallback(async (dx: number, dy: number) => {
     if (!isMyTurn || !room || !user) return;
@@ -336,7 +354,7 @@ const MultiplayerGame = () => {
               onClick={sendInvite}
             >
               <Send className="w-3 h-3" />
-              إرسال دعوة
+              {sendingInvite ? "جاري الإرسال..." : "إرسال دعوة"}
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">

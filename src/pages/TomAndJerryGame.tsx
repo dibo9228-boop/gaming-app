@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { AchievementsDialog } from "@/components/AchievementsDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useApiAction } from "@/hooks/use-api-action";
 
 const STAGES_PER_LEVEL = 25;
 
@@ -209,35 +210,38 @@ const TomAndJerryGame = () => {
   const [moves, setMoves] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const { run: fetchProgressAndXpAction, loading: loadingProgress } = useApiAction(async () => {
     if (!user) {
       setProgressByDifficulty({ easy: 0, medium: 0, hard: 0 });
       setTotalXp(0);
       setProgressLoaded(true);
       return;
     }
-    const fetchProgressAndXp = async () => {
-      const [progressRes, profileRes] = await Promise.all([
-        supabase
-          .from("tom_jerry_progress")
-          .select("difficulty, max_stage_completed")
-          .eq("user_id", user.id),
-        supabase.from("profiles").select("total_xp").eq("user_id", user.id).single(),
-      ]);
-      const next: ProgressByDifficulty = { easy: 0, medium: 0, hard: 0 };
-      if (progressRes.data) {
-        for (const row of progressRes.data) {
-          if (row.difficulty === "easy" || row.difficulty === "medium" || row.difficulty === "hard") {
-            next[row.difficulty] = row.max_stage_completed ?? 0;
-          }
+    const [progressRes, profileRes] = await Promise.all([
+      supabase
+        .from("tom_jerry_progress")
+        .select("difficulty, max_stage_completed")
+        .eq("user_id", user.id),
+      supabase.from("profiles").select("total_xp").eq("user_id", user.id).single(),
+    ]);
+    const next: ProgressByDifficulty = { easy: 0, medium: 0, hard: 0 };
+    if (progressRes.data) {
+      for (const row of progressRes.data) {
+        if (row.difficulty === "easy" || row.difficulty === "medium" || row.difficulty === "hard") {
+          next[row.difficulty] = row.max_stage_completed ?? 0;
         }
       }
-      setProgressByDifficulty(next);
-      setTotalXp(profileRes.data?.total_xp ?? 0);
+    }
+    setProgressByDifficulty(next);
+    setTotalXp(profileRes.data?.total_xp ?? 0);
+    setProgressLoaded(true);
+  });
+
+  useEffect(() => {
+    fetchProgressAndXpAction().catch(() => {
       setProgressLoaded(true);
-    };
-    fetchProgressAndXp();
-  }, [user?.id]);
+    });
+  }, []);
 
   useEffect(() => {
     if (!progressLoaded) return;
@@ -259,7 +263,7 @@ const TomAndJerryGame = () => {
     [navigate, difficulty, user, progressByDifficulty]
   );
 
-  const saveProgress = useCallback(
+  const { run: saveProgressAction, loading: savingProgress } = useApiAction(
     async (completedStage: number) => {
       if (!user) return;
       const current = progressByDifficulty[difficulty];
@@ -294,8 +298,14 @@ const TomAndJerryGame = () => {
         setTotalXp(newTotalXp);
         setEarnedXpThisWin(xpEarned);
       }
+    }
+  );
+
+  const saveProgress = useCallback(
+    (completedStage: number) => {
+      saveProgressAction(completedStage).catch(() => {});
     },
-    [user, difficulty, progressByDifficulty]
+    []
   );
 
   useEffect(() => {
@@ -491,10 +501,12 @@ const TomAndJerryGame = () => {
       </div>
 
       {/* Game Info */}
-      <div className="flex gap-6 mb-4 text-sm font-body text-muted-foreground">
+      <div className="flex flex-wrap gap-4 mb-4 text-sm font-body text-muted-foreground items-center justify-center">
         <span>🐭 = أنت (جيري)</span>
         <span>🐱 = توم (بوت)</span>
         <span>🏠 = المخرج</span>
+        {loadingProgress && <span className="text-primary">جاري تحميل التقدم...</span>}
+        {savingProgress && <span className="text-primary">جاري حفظ التقدم...</span>}
       </div>
 
       {/* Grid */}
@@ -600,7 +612,7 @@ const TomAndJerryGame = () => {
               </p>
               <div className="flex flex-wrap gap-3 justify-center">
                 {status === "jerry_wins" && stage < STAGES_PER_LEVEL && user && (
-                  <Button onClick={() => goToStage(stage + 1)} className="gap-2">
+                  <Button onClick={() => goToStage(stage + 1)} className="gap-2" disabled={savingProgress}>
                     المرحلة التالية ({stage + 1}) →
                   </Button>
                 )}
@@ -610,7 +622,12 @@ const TomAndJerryGame = () => {
                 {status === "jerry_wins" && stage === STAGES_PER_LEVEL && (
                   <p className="text-sm text-primary font-body w-full mb-2">🎊 أكملت كل مراحل المستوى!</p>
                 )}
-                <Button onClick={resetGame} variant={status === "jerry_wins" ? "outline" : "default"} className="gap-2">
+                <Button
+                  onClick={resetGame}
+                  variant={status === "jerry_wins" ? "outline" : "default"}
+                  className="gap-2"
+                  disabled={savingProgress}
+                >
                   <RotateCcw className="w-4 h-4" />
                   {status === "jerry_wins" ? "إعادة المرحلة" : "العب مرة تانية"}
                 </Button>

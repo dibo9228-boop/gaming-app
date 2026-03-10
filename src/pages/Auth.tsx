@@ -6,23 +6,23 @@ import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
 import { Gamepad2, LogIn, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useApiAction } from "@/hooks/use-api-action";
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { run: submitAuth, loading } = useApiAction(
+    async (isLoginValue: boolean, emailValue: string, passwordValue: string, displayNameValue: string) => {
+      if (isLoginValue) {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: emailValue,
+          password: passwordValue,
+        });
         if (error) throw error;
         navigate("/");
       } else {
@@ -30,10 +30,10 @@ const Auth = () => {
         // In Supabase Dashboard: Authentication → Providers → Email → turn OFF "Confirm email"
         // so users can log in immediately after sign up.
         const { error } = await supabase.auth.signUp({
-          email,
-          password,
+          email: emailValue,
+          password: passwordValue,
           options: {
-            data: { display_name: displayName },
+            data: { display_name: displayNameValue },
             // emailRedirectTo only used if you enable email confirmation later
             // emailRedirectTo: window.location.origin,
           },
@@ -45,15 +45,18 @@ const Auth = () => {
         });
         navigate("/");
       }
-    } catch (error: any) {
+    }
+  );
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    submitAuth(isLogin, email, password, displayName).catch((error: any) => {
       toast({
         title: "خطأ",
         description: error.message,
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   return (
