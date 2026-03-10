@@ -98,6 +98,207 @@ export type Database = {
         }
         Relationships: []
       }
+      memory_match_progress: {
+        Row: {
+          user_id: string
+          difficulty: string
+          max_stage_completed: number
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          difficulty: string
+          max_stage_completed?: number
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          difficulty?: string
+          max_stage_completed?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      memory_match_rooms: {
+        Row: {
+          id: string
+          host_id: string
+          guest_id: string | null
+          deck: Json
+          revealed_indices: Json
+          matched_indices: Json
+          host_score: number
+          guest_score: number
+          current_turn: string | null
+          join_policy: string
+          status: string
+          invite_code: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          host_id: string
+          guest_id?: string | null
+          deck: Json
+          revealed_indices?: Json
+          matched_indices?: Json
+          host_score?: number
+          guest_score?: number
+          current_turn?: string | null
+          join_policy?: string
+          status?: string
+          invite_code?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          host_id?: string
+          guest_id?: string | null
+          deck?: Json
+          revealed_indices?: Json
+          matched_indices?: Json
+          host_score?: number
+          guest_score?: number
+          current_turn?: string | null
+          join_policy?: string
+          status?: string
+          invite_code?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      memory_match_invites: {
+        Row: {
+          id: string
+          room_id: string
+          from_user_id: string
+          to_user_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          room_id: string
+          from_user_id: string
+          to_user_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          room_id?: string
+          from_user_id?: string
+          to_user_id?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      quiz_battle_progress: {
+        Row: {
+          user_id: string
+          difficulty: string
+          max_stage_completed: number
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          difficulty: string
+          max_stage_completed?: number
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          difficulty?: string
+          max_stage_completed?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      quiz_battle_rooms: {
+        Row: {
+          id: string
+          host_id: string
+          guest_id: string | null
+          questions: Json
+          current_question_index: number
+          host_score: number
+          guest_score: number
+          host_answer_index: number | null
+          guest_answer_index: number | null
+          host_answered_at: string | null
+          guest_answered_at: string | null
+          question_started_at: string
+          status: string
+          join_policy: string
+          invite_code: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          host_id: string
+          guest_id?: string | null
+          questions: Json
+          current_question_index?: number
+          host_score?: number
+          guest_score?: number
+          host_answer_index?: number | null
+          guest_answer_index?: number | null
+          host_answered_at?: string | null
+          guest_answered_at?: string | null
+          question_started_at?: string
+          status?: string
+          join_policy?: string
+          invite_code?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          host_id?: string
+          guest_id?: string | null
+          questions?: Json
+          current_question_index?: number
+          host_score?: number
+          guest_score?: number
+          host_answer_index?: number | null
+          guest_answer_index?: number | null
+          host_answered_at?: string | null
+          guest_answered_at?: string | null
+          question_started_at?: string
+          status?: string
+          join_policy?: string
+          invite_code?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      quiz_battle_invites: {
+        Row: {
+          id: string
+          room_id: string
+          from_user_id: string
+          to_user_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          room_id: string
+          from_user_id: string
+          to_user_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          room_id?: string
+          from_user_id?: string
+          to_user_id?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       tom_jerry_progress: {
         Row: {
           user_id: string
