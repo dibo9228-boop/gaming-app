@@ -8,13 +8,14 @@ import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useApiAction } from "@/hooks/use-api-action";
-import { fetchQuizQuestions, QuizQuestion } from "@/lib/quizData";
+import { getQuestions, QuizQuestion } from "@/lib/quizData";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type Room = Tables<"quiz_battle_rooms">;
-const QUESTION_TIME_MS = 10_000;
+const QUESTION_TIME_MS = 15_000;
+const SECONDS_PER_QUESTION = 15;
 const getErrorMessage = (error: unknown, fallback = "حدث خطأ") =>
   error instanceof Error ? error.message : fallback;
 
@@ -70,7 +71,8 @@ const QuizBattleMultiplayerGame = () => {
 
   const { run: resetRoomAction, loading: resettingRoom } = useApiAction(async () => {
     if (!room || !user || (!isHost && !isGuest)) return;
-    const questions = await fetchQuizQuestions(10, "medium");
+    const categoryId = room.category_id ?? null;
+    const questions = await getQuestions(categoryId, 15);
     const { error } = await supabase
       .from("quiz_battle_rooms")
       .update({
@@ -159,7 +161,7 @@ const QuizBattleMultiplayerGame = () => {
     if (!room || status !== "playing") return;
     const id = window.setInterval(() => {
       const started = new Date(room.question_started_at).getTime();
-      const left = Math.max(0, 10 - Math.floor((Date.now() - started) / 1000));
+      const left = Math.max(0, SECONDS_PER_QUESTION - Math.floor((Date.now() - started) / 1000));
       setTimeLeft(left);
       evaluateQuestion().catch(() => {});
     }, 300);

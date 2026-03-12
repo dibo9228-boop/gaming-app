@@ -1,5 +1,10 @@
 export type QuizDifficulty = "easy" | "medium" | "hard";
 
+export type QuizCategory = {
+  id: number;
+  name: string;
+};
+
 export type QuizQuestion = {
   question: string;
   options: string[];
@@ -70,8 +75,68 @@ async function toArabicQuestion(input: {
   };
 }
 
+const OPENTDB_CATEGORIES = "https://opentdb.com/api_category.php";
+const OPENTDB_API = "https://opentdb.com/api.php";
+
+/**
+ * Fetches all available categories from Open Trivia Database.
+ * Returns categories with id and name (names translated to Arabic).
+ */
+export async function getCategories(): Promise<QuizCategory[]> {
+  const res = await fetch(OPENTDB_CATEGORIES);
+  if (!res.ok) throw new Error("فشل جلب الفئات");
+  const json = await res.json();
+  const raw = (json?.trivia_categories as { id: number; name: string }[]) ?? [];
+  if (!raw.length) throw new Error("لا توجد فئات");
+  const withAr = await Promise.all(
+    raw.map(async (c) => ({
+      id: c.id,
+      name: await translateToArabic(c.name).catch(() => c.name),
+    }))
+  );
+  return withAr;
+}
+
+/**
+ * Fetches questions from Open Trivia DB.
+ * - categoryId: null => عام (كل الفئات)
+ * - difficulty: optional (easy | medium | hard)
+ */
+export async function getQuestions(
+  categoryId: number | null,
+  amount: number,
+  difficulty?: QuizDifficulty | null
+): Promise<QuizQuestion[]> {
+  const params = new URLSearchParams();
+  params.set("amount", String(amount));
+  params.set("type", "multiple");
+  if (categoryId != null && categoryId > 0) {
+    params.set("category", String(categoryId));
+  }
+  if (difficulty) {
+    params.set("difficulty", difficulty);
+  }
+  const url = `${OPENTDB_API}?${params.toString()}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("فشل جلب الأسئلة");
+  const json = await res.json();
+  if (json?.response_code !== 0) throw new Error(json?.response_code === 1 ? "لا توجد أسئلة كافية لهذه الفئة" : "فشل جلب الأسئلة");
+  const results = (json?.results as any[]) ?? [];
+  if (!results.length) throw new Error("لا توجد أسئلة");
+  return Promise.all(
+    results.map((q: any) =>
+      toArabicQuestion({
+        question: q.question,
+        correct: q.correct_answer,
+        incorrect: q.incorrect_answers || [],
+        category: q.category,
+      })
+    )
+  );
+}
+
 async function fetchFromOpenTDB(amount: number, difficulty: QuizDifficulty): Promise<QuizQuestion[]> {
-  const url = `https://opentdb.com/api.php?amount=${amount}&difficulty=${difficulty}&type=multiple`;
+  const url = `${OPENTDB_API}?amount=${amount}&difficulty=${difficulty}&type=multiple`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("OpenTDB request failed");
   const json = await res.json();

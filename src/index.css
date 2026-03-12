@@ -5,57 +5,107 @@
 @tailwind utilities;
 
 @layer base {
+  /* الوضع الافتراضي: لايت مود */
   :root {
-    --background: 230 25% 7%;
-    --foreground: 60 10% 95%;
+    --background: 210 40% 96%;
+    --foreground: 230 30% 10%;
 
-    --card: 230 20% 12%;
-    --card-foreground: 60 10% 95%;
+    --card: 0 0% 100%;
+    --card-foreground: 230 30% 10%;
 
-    --popover: 230 20% 12%;
-    --popover-foreground: 60 10% 95%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 230 30% 10%;
 
-    --primary: 150 80% 50%;
-    --primary-foreground: 230 25% 7%;
+    --primary: 210 90% 55%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 270 70% 60%;
-    --secondary-foreground: 60 10% 95%;
+    --secondary: 260 70% 58%;
+    --secondary-foreground: 0 0% 100%;
 
-    --muted: 230 15% 18%;
-    --muted-foreground: 230 10% 55%;
+    --muted: 210 30% 90%;
+    --muted-foreground: 215 20% 40%;
 
-    --accent: 40 95% 55%;
-    --accent-foreground: 230 25% 7%;
+    --accent: 45 95% 55%;
+    --accent-foreground: 230 30% 12%;
 
-    --destructive: 0 75% 55%;
-    --destructive-foreground: 60 10% 95%;
+    --destructive: 0 75% 50%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 230 15% 22%;
-    --input: 230 15% 22%;
-    --ring: 150 80% 50%;
+    --border: 214 30% 86%;
+    --input: 214 30% 86%;
+    --ring: 210 90% 55%;
 
     --radius: 0.75rem;
 
     /* Custom gaming tokens */
-    --neon-green: 150 80% 50%;
-    --neon-purple: 270 70% 60%;
-    --neon-yellow: 40 95% 55%;
-    --neon-red: 0 75% 55%;
-    --neon-blue: 210 90% 60%;
-    --game-surface: 230 20% 15%;
-    --game-grid: 230 15% 20%;
+    --neon-green: 150 80% 45%;
+    --neon-purple: 265 75% 55%;
+    --neon-yellow: 45 95% 55%;
+    --neon-red: 0 75% 50%;
+    --neon-blue: 210 90% 55%;
+    --game-surface: 210 40% 96%;
+    --game-grid: 210 30% 92%;
 
-    --sidebar-background: 230 20% 10%;
-    --sidebar-foreground: 60 10% 95%;
-    --sidebar-primary: 150 80% 50%;
-    --sidebar-primary-foreground: 230 25% 7%;
-    --sidebar-accent: 230 15% 18%;
-    --sidebar-accent-foreground: 60 10% 95%;
-    --sidebar-border: 230 15% 22%;
-    --sidebar-ring: 150 80% 50%;
+    --sidebar-background: 210 40% 97%;
+    --sidebar-foreground: 230 30% 10%;
+    --sidebar-primary: 210 90% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 30% 92%;
+    --sidebar-accent-foreground: 230 30% 10%;
+    --sidebar-border: 214 30% 86%;
+    --sidebar-ring: 210 90% 55%;
 
     --font-arcade: 'Press Start 2P', cursive;
     --font-body: 'Cairo', sans-serif;
+  }
+
+  /* دارك مود: نمط اللعبة الداكن الأصلي مع إحساس نيون */
+  .theme-dark {
+    --background: 230 40% 2%; /* شبه أسود مزرق */
+    --foreground: 210 20% 96%;
+
+    --card: 230 35% 6%;
+    --card-foreground: 210 20% 96%;
+
+    --popover: 230 35% 6%;
+    --popover-foreground: 210 20% 96%;
+
+    --primary: 200 90% 60%; /* أزرق نيون بدل الأخضر */
+    --primary-foreground: 230 40% 3%;
+
+    --secondary: 280 70% 65%;
+    --secondary-foreground: 210 20% 96%;
+
+    --muted: 230 26% 14%;
+    --muted-foreground: 230 18% 62%;
+
+    --accent: 45 95% 60%;
+    --accent-foreground: 230 40% 3%;
+
+    --destructive: 0 75% 52%;
+    --destructive-foreground: 210 20% 96%;
+
+    --border: 230 28% 18%;
+    --input: 230 28% 18%;
+    --ring: 200 90% 60%;
+
+    /* Tokens أوضح للنايت مود */
+    --neon-green: 150 90% 55%;
+    --neon-purple: 280 80% 65%;
+    --neon-yellow: 45 95% 60%;
+    --neon-red: 0 80% 55%;
+    --neon-blue: 210 90% 65%;
+    --game-surface: 230 35% 7%;
+    --game-grid: 230 26% 14%;
+
+    --sidebar-background: 230 38% 4%;
+    --sidebar-foreground: 210 20% 96%;
+    --sidebar-primary: 200 90% 60%;
+    --sidebar-primary-foreground: 230 40% 3%;
+    --sidebar-accent: 230 26% 14%;
+    --sidebar-accent-foreground: 210 20% 96%;
+    --sidebar-border: 230 28% 18%;
+    --sidebar-ring: 200 90% 60%;
   }
 }
 
@@ -67,6 +117,21 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-body);
+    transition: background-color 200ms ease, color 200ms ease;
+  }
+
+  /* خلفية خاصة بالنايت مود (تدرّج + نجوم خفيفة) */
+  .theme-dark body {
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.08) 0, transparent 55%),
+      radial-gradient(circle at 80% 10%, rgba(120, 180, 255, 0.18) 0, transparent 60%),
+      radial-gradient(circle at 10% 80%, rgba(255, 215, 0, 0.08) 0, transparent 55%),
+      radial-gradient(circle at 90% 80%, rgba(186, 85, 211, 0.12) 0, transparent 60%),
+      radial-gradient(circle at 50% 0, rgba(0, 0, 0, 0.9) 0, transparent 60%);
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    background-size: cover;
   }
 
   h1, h2, h3 {

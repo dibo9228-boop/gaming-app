@@ -8,7 +8,7 @@ import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useApiAction } from "@/hooks/use-api-action";
-import { fetchQuizQuestions } from "@/lib/quizData";
+import { getCategories, getQuestions, type QuizCategory } from "@/lib/quizData";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -56,6 +56,8 @@ const QuizBattleLobby = () => {
   const [detailsHostName, setDetailsHostName] = useState("");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [roomToDelete, setRoomToDelete] = useState<Tables<"quiz_battle_rooms"> | null>(null);
+  const [categories, setCategories] = useState<QuizCategory[]>([]);
+  const [createCategoryId, setCreateCategoryId] = useState<number | null>(null);
 
   const fetchRooms = useCallback(async () => {
     if (!user) return;
@@ -94,10 +96,11 @@ const QuizBattleLobby = () => {
 
   const { run: createRoomAction, loading: creatingRoom } = useApiAction(async () => {
     if (!user) throw new Error("مطلوب تسجيل الدخول");
-    const questions = await fetchQuizQuestions(10, "medium");
+    const categoryId = createCategoryId ?? null;
+    const questions = await getQuestions(categoryId, 15);
     const { data, error } = await supabase
       .from("quiz_battle_rooms")
-      .insert({ host_id: user.id, questions })
+      .insert({ host_id: user.id, questions, category_id: categoryId })
       .select()
       .single();
     if (error) throw error;
@@ -170,6 +173,12 @@ const QuizBattleLobby = () => {
   });
 
   useEffect(() => {
+    getCategories()
+      .then(setCategories)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (!user) return;
     fetchRooms();
     fetchInvites();
@@ -231,16 +240,22 @@ const QuizBattleLobby = () => {
 
         <div className="space-y-4 mb-8">
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-lg p-5">
-            <p className="text-sm text-muted-foreground font-body mb-3">العب ضد البوت بمؤقت 10 ثواني لكل سؤال</p>
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={() => navigate("/game/quiz-battle?level=easy&stage=1")} variant="outline" size="sm">سهل</Button>
-              <Button onClick={() => navigate("/game/quiz-battle?level=medium&stage=1")} size="sm">متوسط</Button>
-              <Button onClick={() => navigate("/game/quiz-battle?level=hard&stage=1")} variant="secondary" size="sm">صعب</Button>
-            </div>
+            <p className="text-sm text-muted-foreground font-body mb-3">اختبر نفسك: 15 سؤال، 15 ثانية لكل سؤال</p>
+            <Button onClick={() => navigate("/game/quiz-battle")} className="w-full">
+              اختبر نفسك 🎯
+            </Button>
           </motion.div>
 
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-lg p-5">
-            <div className="flex items-center gap-2 mb-3"><Plus className="w-5 h-5 text-secondary" /><h2 className="text-sm arcade-text">إنشاء غرفة</h2></div>
+            <div className="flex items-center gap-2 mb-3"><Plus className="w-5 h-5 text-secondary" /><h2 className="text-sm arcade-text">إنشاء غرفة (جماعي)</h2></div>
+            <p className="text-xs text-muted-foreground font-body mb-2">15 سؤال، 15 ثانية لكل سؤال. أسئلة عامة أو فئة محددة:</p>
+            <Select value={createCategoryId === null ? "general" : String(createCategoryId)} onValueChange={(v) => setCreateCategoryId(v === "general" ? null : (v ? parseInt(v, 10) : null))}>
+              <SelectTrigger className="w-full mb-2"><SelectValue placeholder="الفئة" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="general">أسئلة عامة</SelectItem>
+                {categories.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
             <Button onClick={() => createRoomAction().catch((e) => toast({ title: "خطأ", description: getErrorMessage(e), variant: "destructive" }))} disabled={creatingRoom} className="w-full">
               {creatingRoom ? "جاري الإنشاء..." : "إنشاء غرفة 🎮"}
             </Button>

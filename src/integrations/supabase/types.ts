@@ -234,6 +234,7 @@ export type Database = {
           invite_code: string
           created_at: string
           updated_at: string
+          category_id: number | null
         }
         Insert: {
           id?: string
@@ -253,6 +254,7 @@ export type Database = {
           invite_code?: string
           created_at?: string
           updated_at?: string
+          category_id?: number | null
         }
         Update: {
           id?: string
@@ -272,6 +274,7 @@ export type Database = {
           invite_code?: string
           created_at?: string
           updated_at?: string
+          category_id?: number | null
         }
         Relationships: []
       }

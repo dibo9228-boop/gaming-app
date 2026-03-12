@@ -396,8 +396,9 @@ const TomAndJerryGame = () => {
       switch (e.key) {
         case "ArrowUp": e.preventDefault(); moveJerry(0, -1); break;
         case "ArrowDown": e.preventDefault(); moveJerry(0, 1); break;
-        case "ArrowLeft": e.preventDefault(); moveJerry(-1, 0); break;
-        case "ArrowRight": e.preventDefault(); moveJerry(1, 0); break;
+        // عكسنا اتجاه اليمين/اليسار ليتطابق مع ما تراه على الشاشة في الوضع الحالي
+        case "ArrowLeft": e.preventDefault(); moveJerry(1, 0); break;
+        case "ArrowRight": e.preventDefault(); moveJerry(-1, 0); break;
       }
     };
 
