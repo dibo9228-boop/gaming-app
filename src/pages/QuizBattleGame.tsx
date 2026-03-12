@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Home, RotateCcw } from "lucide-react";
+import { ArrowRight, Home, RotateCcw, Trophy } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { AchievementsDialog } from "@/components/AchievementsDialog";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   getCategories,
   getQuestions,
@@ -11,6 +13,7 @@ import {
   type QuizQuestion,
   type QuizDifficulty,
 } from "@/lib/quizData";
+import { addGameXp, getUserStats, type UserStats } from "@/lib/gameStats";
 
 const QUESTIONS_PER_GAME = 15;
 const SECONDS_PER_QUESTION = 15;
@@ -18,6 +21,9 @@ const GENERAL_LABEL = "أسئلة عامة";
 
 const QuizBattleGame = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [userStats, setUserStats] = useState<UserStats>({ totalXp: 0, byGame: {} });
+  const [achievementsOpen, setAchievementsOpen] = useState(false);
   const [categories, setCategories] = useState<QuizCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
@@ -49,6 +55,10 @@ const QuizBattleGame = () => {
       .finally(() => setCategoriesLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (user) getUserStats(user.id).then(setUserStats).catch(() => {});
+  }, [user]);
+
   const startGame = useCallback(
     async (cat: QuizCategory | null) => {
       setHasChosen(true);
@@ -73,9 +83,19 @@ const QuizBattleGame = () => {
     [difficulty]
   );
 
-  const finishGame = useCallback(() => {
-    setGameOver(true);
-  }, []);
+  const finishGame = useCallback(
+    async (finalScore: number, diff: QuizDifficulty) => {
+      setGameOver(true);
+      if (user && finalScore > 0) {
+        const multiplier = diff === "easy" ? 1 : diff === "medium" ? 2 : 3;
+        const xpEarned = finalScore * multiplier;
+        await addGameXp(user.id, "quiz-battle", xpEarned);
+        const fresh = await getUserStats(user.id);
+        setUserStats(fresh);
+      }
+    },
+    [user]
+  );
 
   const nextQuestion = useCallback(() => {
     setSelected(null);
@@ -93,8 +113,11 @@ const QuizBattleGame = () => {
           if (timerRef.current) window.clearInterval(timerRef.current);
           setLocked(true);
           setTimeout(() => {
-            if (index >= questions.length - 1) finishGame();
-            else nextQuestion();
+            setScore((s) => {
+              if (index >= questions.length - 1) finishGame(s, difficulty);
+              else nextQuestion();
+              return s;
+            });
           }, 600);
           return 0;
         }
@@ -104,17 +127,21 @@ const QuizBattleGame = () => {
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current);
     };
-  }, [playing, questions.length, index, nextQuestion, finishGame]);
+  }, [playing, questions.length, index, nextQuestion, finishGame, difficulty]);
 
   const submitAnswer = (optionIndex: number) => {
     if (!current || locked || gameOver) return;
     setSelected(optionIndex);
     setLocked(true);
-    if (optionIndex === current.correctIndex) setScore((s) => s + 1);
-    setTimeout(() => {
-      if (index >= questions.length - 1) finishGame();
-      else nextQuestion();
-    }, 900);
+    const isCorrect = optionIndex === current.correctIndex;
+    setScore((s) => {
+      const newScore = isCorrect ? s + 1 : s;
+      setTimeout(() => {
+        if (index >= questions.length - 1) finishGame(newScore, difficulty);
+        else nextQuestion();
+      }, 900);
+      return newScore;
+    });
   };
 
   const backToCategories = () => {
@@ -135,16 +162,31 @@ const QuizBattleGame = () => {
             <Home className="w-4 h-4 ml-1" /> اللوبي
           </Button>
           <h1 className="text-xs arcade-text text-accent">❓ اختبر نفسك</h1>
-          <div className="text-xs text-muted-foreground font-body flex flex-col items-end">
-            <span>
-              {playing && `السؤال ${index + 1}/${questions.length} · ${timeLeft}s`}
-            </span>
-            <span>
-              الصعوبة:{" "}
-              {difficulty === "easy" ? "سهل" : difficulty === "hard" ? "صعب" : "متوسط"}
-            </span>
+          <div className="flex items-center gap-2">
+            {user && (
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setAchievementsOpen(true)} title="الإنجازات">
+                <Trophy className="h-4 w-4" />
+              </Button>
+            )}
+            <div className="text-xs text-muted-foreground font-body flex flex-col items-end">
+              <span>
+                {playing && `السؤال ${index + 1}/${questions.length} · ${timeLeft}s`}
+              </span>
+              <span>
+                الصعوبة:{" "}
+                {difficulty === "easy" ? "سهل" : difficulty === "hard" ? "صعب" : "متوسط"}
+              </span>
+            </div>
           </div>
         </div>
+
+        {user && (
+          <AchievementsDialog
+            open={achievementsOpen}
+            onOpenChange={setAchievementsOpen}
+            stats={userStats}
+          />
+        )}
 
         {/* شاشة اختيار الفئة أو أسئلة عامة */}
         {showingCategories && (

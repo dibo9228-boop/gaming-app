@@ -7,6 +7,7 @@ import { AchievementsDialog } from "@/components/AchievementsDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useApiAction } from "@/hooks/use-api-action";
+import { addGameXp, getUserStats, type UserStats } from "@/lib/gameStats";
 
 const STAGES_PER_LEVEL = 25;
 
@@ -186,7 +187,7 @@ const TomAndJerryGame = () => {
     hard: 0,
   });
   const [progressLoaded, setProgressLoaded] = useState(false);
-  const [totalXp, setTotalXp] = useState(0);
+  const [userStats, setUserStats] = useState<UserStats>({ totalXp: 0, byGame: {} });
   const [earnedXpThisWin, setEarnedXpThisWin] = useState(0);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
 
@@ -213,16 +214,16 @@ const TomAndJerryGame = () => {
   const { run: fetchProgressAndXpAction, loading: loadingProgress } = useApiAction(async () => {
     if (!user) {
       setProgressByDifficulty({ easy: 0, medium: 0, hard: 0 });
-      setTotalXp(0);
+      setUserStats({ totalXp: 0, byGame: {} });
       setProgressLoaded(true);
       return;
     }
-    const [progressRes, profileRes] = await Promise.all([
+    const [progressRes, stats] = await Promise.all([
       supabase
         .from("tom_jerry_progress")
         .select("difficulty, max_stage_completed")
         .eq("user_id", user.id),
-      supabase.from("profiles").select("total_xp").eq("user_id", user.id).single(),
+      getUserStats(user.id),
     ]);
     const next: ProgressByDifficulty = { easy: 0, medium: 0, hard: 0 };
     if (progressRes.data) {
@@ -233,7 +234,7 @@ const TomAndJerryGame = () => {
       }
     }
     setProgressByDifficulty(next);
-    setTotalXp(profileRes.data?.total_xp ?? 0);
+    setUserStats(stats);
     setProgressLoaded(true);
   });
 
@@ -273,29 +274,27 @@ const TomAndJerryGame = () => {
         .select("max_stage_completed")
         .eq("user_id", user.id)
         .eq("difficulty", difficulty)
-        .single();
+        .maybeSingle();
       const prevMax = existing?.max_stage_completed ?? 0;
       const newMax = Math.max(prevMax, completedStage);
-      await supabase.from("tom_jerry_progress").upsert(
-        {
-          user_id: user.id,
-          difficulty,
-          max_stage_completed: newMax,
-        },
-        { onConflict: "user_id,difficulty" }
-      );
+      if (existing) {
+        await supabase
+          .from("tom_jerry_progress")
+          .update({ max_stage_completed: newMax })
+          .eq("user_id", user.id)
+          .eq("difficulty", difficulty);
+      } else {
+        await supabase
+          .from("tom_jerry_progress")
+          .insert({ user_id: user.id, difficulty, max_stage_completed: newMax });
+      }
       setProgressByDifficulty((prev) => ({ ...prev, [difficulty]: newMax }));
 
       if (newMax > prevMax) {
         const xpEarned = getXpForStage(difficulty, completedStage);
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("total_xp")
-          .eq("user_id", user.id)
-          .single();
-        const newTotalXp = (profile?.total_xp ?? 0) + xpEarned;
-        await supabase.from("profiles").update({ total_xp: newTotalXp }).eq("user_id", user.id);
-        setTotalXp(newTotalXp);
+        await addGameXp(user.id, "tom-and-jerry", xpEarned);
+        const fresh = await getUserStats(user.id);
+        setUserStats(fresh);
         setEarnedXpThisWin(xpEarned);
       }
     }
@@ -303,7 +302,7 @@ const TomAndJerryGame = () => {
 
   const saveProgress = useCallback(
     (completedStage: number) => {
-      saveProgressAction(completedStage).catch(() => {});
+      saveProgressAction(completedStage).catch((err) => console.error("save progress failed:", err));
     },
     []
   );
@@ -450,7 +449,7 @@ const TomAndJerryGame = () => {
               <Trophy className="h-4 w-4" />
             </Button>
           )}
-          <span title="النقاط محفوظة بحسابك">نقاط: {user ? totalXp : "—"}</span>
+          <span title="النقاط محفوظة بحسابك">نقاط: {user ? userStats.totalXp : "—"}</span>
           <span className="px-1.5 py-0.5 rounded bg-muted">مرحلة {stage} من {STAGES_PER_LEVEL}</span>
           <div className="flex gap-1">
             {(["easy", "medium", "hard"] as const).map((d) => {
@@ -646,7 +645,7 @@ const TomAndJerryGame = () => {
         <AchievementsDialog
           open={achievementsOpen}
           onOpenChange={setAchievementsOpen}
-          totalXp={totalXp}
+          stats={userStats}
         />
       )}
     </div>

@@ -35,6 +35,7 @@ type InviteWithDetails = Tables<"memory_match_invites"> & {
   room?: { id: string; invite_code: string; status: string };
   from_display_name?: string;
 };
+type Difficulty = "easy" | "medium" | "hard";
 
 const LOBBY_PATH = "/game/memory-match/lobby";
 const getErrorMessage = (error: unknown, fallback = "حدث خطأ") =>
@@ -51,6 +52,11 @@ const MemoryLobby = () => {
   const [myRooms, setMyRooms] = useState<Tables<"memory_match_rooms">[]>([]);
   const [invites, setInvites] = useState<InviteWithDetails[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [progressByDifficulty, setProgressByDifficulty] = useState<Record<Difficulty, number>>({
+    easy: 0,
+    medium: 0,
+    hard: 0,
+  });
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsRoom, setDetailsRoom] = useState<Tables<"memory_match_rooms"> | null>(null);
@@ -92,6 +98,32 @@ const MemoryLobby = () => {
       }))
     );
   }, [user]);
+
+  const fetchProgress = useCallback(async () => {
+    if (!user) {
+      setProgressByDifficulty({ easy: 0, medium: 0, hard: 0 });
+      return;
+    }
+    const { data } = await supabase
+      .from("memory_match_progress")
+      .select("difficulty, max_stage_completed")
+      .eq("user_id", user.id);
+    const next: Record<Difficulty, number> = { easy: 0, medium: 0, hard: 0 };
+    for (const row of data || []) {
+      if (row.difficulty === "easy" || row.difficulty === "medium" || row.difficulty === "hard") {
+        next[row.difficulty] = row.max_stage_completed ?? 0;
+      }
+    }
+    setProgressByDifficulty(next);
+  }, [user]);
+
+  const startSolo = useCallback(
+    (difficulty: Difficulty) => {
+      const nextStage = Math.min(25, (progressByDifficulty[difficulty] ?? 0) + 1);
+      navigate(`/game/memory-match?level=${difficulty}&stage=${nextStage}`);
+    },
+    [navigate, progressByDifficulty]
+  );
 
   const { run: createRoomAction, loading: creatingRoom } = useApiAction(async () => {
     if (!user) throw new Error("مطلوب تسجيل الدخول");
@@ -195,6 +227,7 @@ const MemoryLobby = () => {
     if (!user) return;
     fetchRooms();
     fetchInvites();
+    fetchProgress();
     const ch1 = supabase
       .channel("memory-lobby-rooms")
       .on("postgres_changes", { event: "*", schema: "public", table: "memory_match_rooms" }, () => fetchRooms())
@@ -207,7 +240,7 @@ const MemoryLobby = () => {
       supabase.removeChannel(ch1);
       supabase.removeChannel(ch2);
     };
-  }, [user]);
+  }, [user, fetchRooms, fetchInvites, fetchProgress]);
 
   useEffect(() => {
     const join = searchParams.get("join");
@@ -216,7 +249,7 @@ const MemoryLobby = () => {
       setSearchParams({}, { replace: true });
       toast({ title: "تم تعبئة كود الدعوة" });
     }
-  }, [searchParams]);
+  }, [searchParams, setSearchParams, toast]);
 
   const copyCode = (code: string, id: string) => {
     navigator.clipboard.writeText(code);
@@ -255,9 +288,15 @@ const MemoryLobby = () => {
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-lg p-5">
             <p className="text-sm text-muted-foreground font-body mb-3">العب ضد البوت بمراحل متدرجة</p>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => navigate("/game/memory-match?level=easy&stage=1")} variant="outline" size="sm">سهل</Button>
-              <Button onClick={() => navigate("/game/memory-match?level=medium&stage=1")} size="sm">متوسط</Button>
-              <Button onClick={() => navigate("/game/memory-match?level=hard&stage=1")} variant="secondary" size="sm">صعب</Button>
+              <Button onClick={() => startSolo("easy")} variant="outline" size="sm">
+                سهل (مرحلة {(progressByDifficulty.easy ?? 0) + 1})
+              </Button>
+              <Button onClick={() => startSolo("medium")} size="sm">
+                متوسط (مرحلة {(progressByDifficulty.medium ?? 0) + 1})
+              </Button>
+              <Button onClick={() => startSolo("hard")} variant="secondary" size="sm">
+                صعب (مرحلة {(progressByDifficulty.hard ?? 0) + 1})
+              </Button>
             </div>
           </motion.div>
 

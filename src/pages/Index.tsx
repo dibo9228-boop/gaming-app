@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Gamepad2, Zap, Trophy, LogIn, LogOut } from "lucide-react";
+import { Gamepad2, Zap, Trophy, LogIn, LogOut, Crown } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
 import { AchievementsDialog } from "@/components/AchievementsDialog";
+import { getUserStats, type UserStats } from "@/lib/gameStats";
 
 const games = [
   {
@@ -49,34 +49,38 @@ const games = [
 const Index = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const [totalXp, setTotalXp] = useState<number | null>(null);
+  const [userStats, setUserStats] = useState<UserStats | null>(null);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
 
   useEffect(() => {
     if (!user) {
-      setTotalXp(null);
+      setUserStats(null);
       return;
     }
-    supabase
-      .from("profiles")
-      .select("total_xp")
-      .eq("user_id", user.id)
-      .single()
-      .then(({ data }) => setTotalXp(data?.total_xp ?? 0));
-  }, [user?.id]);
+    getUserStats(user.id).then(setUserStats).catch(() => {});
+  }, [user]);
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
       {/* Auth Bar */}
-      <div className="flex justify-end p-4">
+      <div className="flex justify-between items-center p-4">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate("/leaderboard")}
+          className="text-muted-foreground gap-1"
+        >
+          <Crown className="w-4 h-4" />
+          <span className="hidden sm:inline">لوحة الصدارة</span>
+        </Button>
         {user ? (
           <div className="flex items-center gap-3">
-            {totalXp !== null && (
+            {userStats !== null && (
               <>
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setAchievementsOpen(true)} title="الإنجازات">
                   <Trophy className="h-4 w-4" />
                 </Button>
-                <span className="text-sm text-primary font-body">نقاط: {totalXp}</span>
+                <span className="text-sm text-primary font-body">نقاط: {userStats.totalXp}</span>
               </>
             )}
             <span className="text-sm text-muted-foreground font-body">{user.email}</span>
@@ -90,8 +94,12 @@ const Index = () => {
           </Button>
         )}
       </div>
-      {user && totalXp !== null && (
-        <AchievementsDialog open={achievementsOpen} onOpenChange={setAchievementsOpen} totalXp={totalXp} />
+      {user && userStats !== null && (
+        <AchievementsDialog
+          open={achievementsOpen}
+          onOpenChange={setAchievementsOpen}
+          stats={userStats}
+        />
       )}
       {/* Hero */}
       <section className="relative overflow-hidden py-20 px-4">

@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useApiAction } from "@/hooks/use-api-action";
 import { Difficulty, generateDeck } from "@/lib/memoryMatch";
+import { addGameXp, getUserStats, type UserStats } from "@/lib/gameStats";
 
 const STAGES_PER_LEVEL = 25;
 
@@ -39,7 +40,7 @@ const MemoryMatchGame = () => {
 
   const [progressByDifficulty, setProgressByDifficulty] = useState<ProgressByDifficulty>({ easy: 0, medium: 0, hard: 0 });
   const [progressLoaded, setProgressLoaded] = useState(false);
-  const [totalXp, setTotalXp] = useState(0);
+  const [userStats, setUserStats] = useState<UserStats>({ totalXp: 0, byGame: {} });
   const [earnedXpThisWin, setEarnedXpThisWin] = useState(0);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
 
@@ -60,13 +61,13 @@ const MemoryMatchGame = () => {
   const { run: fetchProgressAndXp, loading: loadingProgress } = useApiAction(async () => {
     if (!user) {
       setProgressByDifficulty({ easy: 0, medium: 0, hard: 0 });
-      setTotalXp(0);
+      setUserStats({ totalXp: 0, byGame: {} });
       setProgressLoaded(true);
       return;
     }
-    const [progressRes, profileRes] = await Promise.all([
+    const [progressRes, stats] = await Promise.all([
       supabase.from("memory_match_progress").select("difficulty, max_stage_completed").eq("user_id", user.id),
-      supabase.from("profiles").select("total_xp").eq("user_id", user.id).single(),
+      getUserStats(user.id),
     ]);
     const next: ProgressByDifficulty = { easy: 0, medium: 0, hard: 0 };
     for (const row of progressRes.data || []) {
@@ -75,7 +76,7 @@ const MemoryMatchGame = () => {
       }
     }
     setProgressByDifficulty(next);
-    setTotalXp(profileRes.data?.total_xp ?? 0);
+    setUserStats(stats);
     setProgressLoaded(true);
   });
 
@@ -83,20 +84,36 @@ const MemoryMatchGame = () => {
     if (!user) return;
     const prevMax = progressByDifficulty[difficulty] ?? 0;
     if (completedStage <= prevMax) return;
-    await supabase.from("memory_match_progress").upsert(
-      { user_id: user.id, difficulty, max_stage_completed: completedStage },
-      { onConflict: "user_id,difficulty" }
-    );
-    setProgressByDifficulty((p) => ({ ...p, [difficulty]: completedStage }));
-    const xp = getXpForStage(difficulty, completedStage);
-    const { data: profile } = await supabase.from("profiles").select("total_xp").eq("user_id", user.id).single();
-    const newTotalXp = (profile?.total_xp ?? 0) + xp;
-    await supabase.from("profiles").update({ total_xp: newTotalXp }).eq("user_id", user.id);
-    setTotalXp(newTotalXp);
+    const { data: existing } = await supabase
+      .from("memory_match_progress")
+      .select("max_stage_completed")
+      .eq("user_id", user.id)
+      .eq("difficulty", difficulty)
+      .maybeSingle();
+    const prevSaved = existing?.max_stage_completed ?? 0;
+    const newMax = Math.max(prevSaved, completedStage);
+    if (newMax <= prevSaved) return;
+    if (existing) {
+      await supabase
+        .from("memory_match_progress")
+        .update({ max_stage_completed: newMax })
+        .eq("user_id", user.id)
+        .eq("difficulty", difficulty);
+    } else {
+      await supabase
+        .from("memory_match_progress")
+        .insert({ user_id: user.id, difficulty, max_stage_completed: newMax });
+    }
+    setProgressByDifficulty((p) => ({ ...p, [difficulty]: newMax }));
+    const xp = getXpForStage(difficulty, newMax);
+    await addGameXp(user.id, "memory-match", xp);
+    const fresh = await getUserStats(user.id);
+    setUserStats(fresh);
     setEarnedXpThisWin(xp);
   });
 
   useEffect(() => {
+    setProgressLoaded(false);
     fetchProgressAndXp().catch(() => setProgressLoaded(true));
   }, []);
 
@@ -129,12 +146,12 @@ const MemoryMatchGame = () => {
       if (nextMatched.length !== deck.length) return false;
       if (nextPlayer > nextBot) {
         setStatus("player_wins");
-        if (user) saveProgress(stage).catch(() => {});
+        if (user) saveProgress(stage).catch((err) => console.error("save progress failed:", err));
       } else if (nextBot > nextPlayer) setStatus("bot_wins");
       else setStatus("draw");
       return true;
     },
-    [deck.length, user]
+    [deck.length, user, saveProgress, stage]
   );
 
   const resolvePair = useCallback(
@@ -173,7 +190,7 @@ const MemoryMatchGame = () => {
         setTimeout(() => resolvePair(next[0], next[1], "player"), 700);
       }
     },
-    [status, turn, busy, matched, revealed]
+    [status, turn, busy, matched, revealed, resolvePair]
   );
 
   const availableForBot = useMemo(
@@ -270,7 +287,13 @@ const MemoryMatchGame = () => {
           )}
         </AnimatePresence>
 
-        {user && <AchievementsDialog open={achievementsOpen} onOpenChange={setAchievementsOpen} totalXp={totalXp} />}
+        {user && (
+          <AchievementsDialog
+            open={achievementsOpen}
+            onOpenChange={setAchievementsOpen}
+            stats={userStats}
+          />
+        )}
         {!user && (
           <div className="mt-4 text-center text-xs text-muted-foreground font-body">
             سجّل الدخول لحفظ التقدم وفتح المراحل

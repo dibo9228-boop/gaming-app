@@ -234,8 +234,9 @@ const MultiplayerGame = () => {
       switch (e.key) {
         case "ArrowUp": e.preventDefault(); move(0, -1); break;
         case "ArrowDown": e.preventDefault(); move(0, 1); break;
-        case "ArrowLeft": e.preventDefault(); move(-1, 0); break;
-        case "ArrowRight": e.preventDefault(); move(1, 0); break;
+        // Match on-screen visual direction in current RTL layout
+        case "ArrowLeft": e.preventDefault(); move(1, 0); break;
+        case "ArrowRight": e.preventDefault(); move(-1, 0); break;
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -252,7 +253,7 @@ const MultiplayerGame = () => {
     const dx = e.changedTouches[0].clientX - touchStart.current.x;
     const dy = e.changedTouches[0].clientY - touchStart.current.y;
     if (Math.abs(dx) > Math.abs(dy)) {
-      move(dx > 0 ? 1 : -1, 0);
+      move(dx > 0 ? -1 : 1, 0);
     } else {
       move(0, dy > 0 ? 1 : -1);
     }

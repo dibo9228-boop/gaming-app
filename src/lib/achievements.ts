@@ -1,30 +1,63 @@
-/** Achievements unlocked by reaching XP (نقاط) milestones - no extra DB table needed */
+import type { UserStats } from "@/lib/gameStats";
 
 export type Achievement = {
   id: string;
+  gameId: string;
   nameAr: string;
   descriptionAr: string;
   xpRequired: number;
   icon: string;
 };
 
-export const ACHIEVEMENTS: Achievement[] = [
-  { id: "first-10", nameAr: "أول خطوة", descriptionAr: "اجمع 10 نقاط", xpRequired: 10, icon: "🌱" },
-  { id: "xp-50", nameAr: "جيري الصغير", descriptionAr: "اجمع 50 نقطة", xpRequired: 50, icon: "🐭" },
-  { id: "xp-100", nameAr: "هارب محترف", descriptionAr: "اجمع 100 نقطة", xpRequired: 100, icon: "🏃" },
-  { id: "xp-200", nameAr: "بطل المتاهة", descriptionAr: "اجمع 200 نقطة", xpRequired: 200, icon: "🧩" },
-  { id: "xp-350", nameAr: "ملك المسارات", descriptionAr: "اجمع 350 نقطة", xpRequired: 350, icon: "🛤️" },
-  { id: "xp-500", nameAr: "أسطورة توم وجيري", descriptionAr: "اجمع 500 نقطة", xpRequired: 500, icon: "⭐" },
-  { id: "xp-750", nameAr: "بطل الهروب", descriptionAr: "اجمع 750 نقطة", xpRequired: 750, icon: "🏆" },
-  { id: "xp-1000", nameAr: "ملك الهروب", descriptionAr: "اجمع 1000 نقطة", xpRequired: 1000, icon: "👑" },
-  { id: "xp-1500", nameAr: "لا يُمسك", descriptionAr: "اجمع 1500 نقطة", xpRequired: 1500, icon: "💨" },
-  { id: "xp-2000", nameAr: "أسطورة الساحة", descriptionAr: "اجمع 2000 نقطة", xpRequired: 2000, icon: "🎖️" },
-];
+const GAME_LABELS: Record<string, string> = {
+  global: "الحساب العام",
+  "tom-and-jerry": "توم وجيري",
+  "memory-match": "لعبة الذاكرة",
+  "quiz-battle": "معركة الأسئلة",
+};
 
-export function getUnlockedCount(totalXp: number): number {
-  return ACHIEVEMENTS.filter((a) => totalXp >= a.xpRequired).length;
+export function getGameLabel(gameId: string): string {
+  return GAME_LABELS[gameId] ?? gameId;
 }
 
-export function isUnlocked(achievement: Achievement, totalXp: number): boolean {
-  return totalXp >= achievement.xpRequired;
+export const ACHIEVEMENTS: Achievement[] = [
+  // عامة
+  { id: "global-10",  gameId: "global",        nameAr: "أول خطوة",      descriptionAr: "اجمع 10 نقطة من أي لعبة",                     xpRequired: 10,  icon: "🌱" },
+  { id: "global-100", gameId: "global",        nameAr: "لاعب نشيط",     descriptionAr: "اجمع 100 نقطة إجمالية",                       xpRequired: 100, icon: "🎯" },
+  { id: "global-500", gameId: "global",        nameAr: "أسطورة الساحة", descriptionAr: "اجمع 500 نقطة إجمالية",                       xpRequired: 500, icon: "🏆" },
+
+  // توم وجيري
+  { id: "tj-50",  gameId: "tom-and-jerry",   nameAr: "هارب مبتدئ",    descriptionAr: "اجمع 50 نقطة في توم وجيري",                   xpRequired: 50,  icon: "🐭" },
+  { id: "tj-150", gameId: "tom-and-jerry",   nameAr: "هارب محترف",    descriptionAr: "اجمع 150 نقطة في توم وجيري",                  xpRequired: 150, icon: "🏃" },
+  { id: "tj-300", gameId: "tom-and-jerry",   nameAr: "أسطورة المتاهة",descriptionAr: "اجمع 300 نقطة في توم وجيري",                  xpRequired: 300, icon: "🧩" },
+
+  // الذاكرة
+  { id: "mm-50",  gameId: "memory-match",    nameAr: "ذاكرة حلوة",    descriptionAr: "اجمع 50 نقطة في لعبة الذاكرة",               xpRequired: 50,  icon: "🧠" },
+  { id: "mm-150", gameId: "memory-match",    nameAr: "ذاكرة قوية",    descriptionAr: "اجمع 150 نقطة في لعبة الذاكرة",              xpRequired: 150, icon: "🃏" },
+
+  // الأسئلة
+  { id: "quiz-50",  gameId: "quiz-battle",   nameAr: "هاوي أسئلة",    descriptionAr: "اجمع 50 نقطة في معركة الأسئلة",              xpRequired: 50,  icon: "❓" },
+  { id: "quiz-150", gameId: "quiz-battle",   nameAr: "ملك الأسئلة",   descriptionAr: "اجمع 150 نقطة في معركة الأسئلة",             xpRequired: 150, icon: "📚" },
+];
+
+function getXpForGame(gameId: string, stats: UserStats): number {
+  if (gameId === "global") return stats.totalXp;
+  return stats.byGame[gameId]?.xp ?? 0;
+}
+
+export function isUnlocked(achievement: Achievement, stats: UserStats): boolean {
+  return getXpForGame(achievement.gameId, stats) >= achievement.xpRequired;
+}
+
+export function getUnlockedCount(stats: UserStats): number {
+  return ACHIEVEMENTS.filter((a) => isUnlocked(a, stats)).length;
+}
+
+export function groupAchievementsByGame(): Record<string, Achievement[]> {
+  const byGame: Record<string, Achievement[]> = {};
+  for (const a of ACHIEVEMENTS) {
+    if (!byGame[a.gameId]) byGame[a.gameId] = [];
+    byGame[a.gameId].push(a);
+  }
+  return byGame;
 }

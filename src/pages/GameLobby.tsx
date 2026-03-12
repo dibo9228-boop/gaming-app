@@ -6,6 +6,7 @@ import { Home, Plus, Link2, LogOut, Gamepad2, Copy, Check, Trophy, Link, Send, I
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/contexts/AuthContext";
+import { getUserStats, type UserStats } from "@/lib/gameStats";
 import { useToast } from "@/hooks/use-toast";
 import { useApiAction } from "@/hooks/use-api-action";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ type InviteWithDetails = Tables<"game_invites"> & {
   room?: { id: string; invite_code: string; status: string };
   from_display_name?: string;
 };
+type Difficulty = "easy" | "medium" | "hard";
 
 const LOBBY_PATH = "/game/tom-and-jerry/lobby";
 const getErrorMessage = (error: unknown, fallback = "حدث خطأ غير متوقع") =>
@@ -56,7 +58,12 @@ const GameLobby = () => {
   const [inviteCode, setInviteCode] = useState("");
   const [myRooms, setMyRooms] = useState<Tables<"game_rooms">[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [totalXp, setTotalXp] = useState<number | null>(null);
+  const [userStats, setUserStats] = useState<UserStats | null>(null);
+  const [progressByDifficulty, setProgressByDifficulty] = useState<Record<Difficulty, number>>({
+    easy: 0,
+    medium: 0,
+    hard: 0,
+  });
   const [achievementsOpen, setAchievementsOpen] = useState(false);
   const [inviteUsername, setInviteUsername] = useState("");
   const [invites, setInvites] = useState<InviteWithDetails[]>([]);
@@ -218,9 +225,34 @@ const GameLobby = () => {
 
   useEffect(() => {
     if (!user) return;
-    supabase.from("profiles").select("total_xp").eq("user_id", user.id).single()
-      .then(({ data }) => setTotalXp(data?.total_xp ?? 0));
+    getUserStats(user.id).then(setUserStats).catch(() => {});
   }, [user]);
+
+  const fetchProgress = useCallback(async () => {
+    if (!user) {
+      setProgressByDifficulty({ easy: 0, medium: 0, hard: 0 });
+      return;
+    }
+    const { data } = await supabase
+      .from("tom_jerry_progress")
+      .select("difficulty, max_stage_completed")
+      .eq("user_id", user.id);
+    const next: Record<Difficulty, number> = { easy: 0, medium: 0, hard: 0 };
+    for (const row of data || []) {
+      if (row.difficulty === "easy" || row.difficulty === "medium" || row.difficulty === "hard") {
+        next[row.difficulty] = row.max_stage_completed ?? 0;
+      }
+    }
+    setProgressByDifficulty(next);
+  }, [user]);
+
+  const startSolo = useCallback(
+    (difficulty: Difficulty) => {
+      const nextStage = Math.min(25, (progressByDifficulty[difficulty] ?? 0) + 1);
+      navigate(`/game/tom-and-jerry?level=${difficulty}&stage=${nextStage}`);
+    },
+    [navigate, progressByDifficulty]
+  );
 
   const fetchRooms = useCallback(async () => {
     if (!user) return;
@@ -236,6 +268,7 @@ const GameLobby = () => {
   useEffect(() => {
     if (!user) return;
     fetchRooms();
+    fetchProgress();
 
     const channel = supabase
       .channel("lobby-rooms")
@@ -249,7 +282,7 @@ const GameLobby = () => {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [user, fetchRooms, navigate]);
+  }, [user, fetchRooms, fetchProgress, navigate]);
 
   const fetchInvites = useCallback(async () => {
     if (!user) return;
@@ -433,12 +466,12 @@ const GameLobby = () => {
           </Button>
           <h1 className="text-xs arcade-text text-accent text-glow-yellow">🐱 توم وجيري 🐭</h1>
           <div className="flex items-center gap-2">
-            {totalXp !== null && (
+            {userStats !== null && (
               <>
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setAchievementsOpen(true)} title="الإنجازات">
                   <Trophy className="h-4 w-4" />
                 </Button>
-                <span className="text-xs text-primary font-body">نقاط: {totalXp}</span>
+                <span className="text-xs text-primary font-body">نقاط: {userStats.totalXp}</span>
               </>
             )}
             <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
@@ -446,8 +479,8 @@ const GameLobby = () => {
             </Button>
           </div>
         </div>
-        {totalXp !== null && (
-          <AchievementsDialog open={achievementsOpen} onOpenChange={setAchievementsOpen} totalXp={totalXp} />
+        {userStats !== null && (
+          <AchievementsDialog open={achievementsOpen} onOpenChange={setAchievementsOpen} stats={userStats} />
         )}
 
         {/* Mode Selection */}
@@ -461,14 +494,14 @@ const GameLobby = () => {
             </div>
             <p className="text-sm text-muted-foreground font-body mb-4">العب لحالك ضد الذكاء الاصطناعي. لكل مستوى ٢٥ مرحلة متدرجة. اختر المستوى:</p>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => navigate("/game/tom-and-jerry?level=easy&stage=1")} variant="outline" size="sm" className="flex-1 min-w-[80px]">
-                سهل (٢٥ مرحلة)
+              <Button onClick={() => startSolo("easy")} variant="outline" size="sm" className="flex-1 min-w-[80px]">
+                سهل (مرحلة {Math.min(25, (progressByDifficulty.easy ?? 0) + 1)})
               </Button>
-              <Button onClick={() => navigate("/game/tom-and-jerry?level=medium&stage=1")} size="sm" className="flex-1 min-w-[80px]">
-                متوسط (٢٥ مرحلة)
+              <Button onClick={() => startSolo("medium")} size="sm" className="flex-1 min-w-[80px]">
+                متوسط (مرحلة {Math.min(25, (progressByDifficulty.medium ?? 0) + 1)})
               </Button>
-              <Button onClick={() => navigate("/game/tom-and-jerry?level=hard&stage=1")} variant="secondary" size="sm" className="flex-1 min-w-[80px]">
-                صعب (٢٥ مرحلة)
+              <Button onClick={() => startSolo("hard")} variant="secondary" size="sm" className="flex-1 min-w-[80px]">
+                صعب (مرحلة {Math.min(25, (progressByDifficulty.hard ?? 0) + 1)})
               </Button>
             </div>
           </motion.div>

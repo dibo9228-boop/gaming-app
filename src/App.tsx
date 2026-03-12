@@ -17,6 +17,7 @@ import MemoryMultiplayerGame from "./pages/MemoryMultiplayerGame";
 import QuizBattleGame from "./pages/QuizBattleGame";
 import QuizBattleLobby from "./pages/QuizBattleLobby";
 import QuizBattleMultiplayerGame from "./pages/QuizBattleMultiplayerGame";
+import Leaderboard from "./pages/Leaderboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +42,7 @@ const App = () => (
               <Route path="/game/quiz-battle" element={<QuizBattleGame />} />
               <Route path="/game/quiz-battle/lobby" element={<QuizBattleLobby />} />
               <Route path="/game/quiz-battle/multi/:roomId" element={<QuizBattleMultiplayerGame />} />
+              <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
