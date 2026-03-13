@@ -387,6 +387,7 @@ export type Database = {
           display_name: string
           id: string
           last_played_date: string | null
+          profile_color: string | null
           streak_count: number
           streak_reward_claimed_today: boolean
           total_xp: number
@@ -399,6 +400,7 @@ export type Database = {
           display_name?: string
           id?: string
           last_played_date?: string | null
+          profile_color?: string | null
           streak_count?: number
           streak_reward_claimed_today?: boolean
           total_xp?: number
@@ -411,6 +413,7 @@ export type Database = {
           display_name?: string
           id?: string
           last_played_date?: string | null
+          profile_color?: string | null
           streak_count?: number
           streak_reward_claimed_today?: boolean
           total_xp?: number

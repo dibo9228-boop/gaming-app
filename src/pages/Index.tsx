@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Gamepad2, Zap, Trophy, LogIn, LogOut, Crown } from "lucide-react";
+import { Gamepad2, Zap, Trophy, LogIn, LogOut, Crown, UserCircle2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { AchievementsDialog } from "@/components/AchievementsDialog";
@@ -148,6 +148,9 @@ const Index = () => {
               </>
             )}
             <span className="text-sm text-muted-foreground font-body">{user.email}</span>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/profile")} className="text-muted-foreground">
+              <UserCircle2 className="w-4 h-4 ml-1" /> الملف
+            </Button>
             <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
               <LogOut className="w-4 h-4 ml-1" /> خروج
             </Button>

@@ -5,6 +5,7 @@ import { Crown, Home, Medal } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 type Profile = Tables<"profiles">;
 
@@ -21,16 +22,29 @@ const Leaderboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase
-      .from("profiles")
-      .select("user_id, display_name, total_xp, avatar_url")
-      .order("total_xp", { ascending: false })
-      .limit(50)
-      .then(({ data }) => {
-        setPlayers(data || []);
-        setLoading(false);
+    const fetchPlayers = () =>
+      supabase
+        .from("profiles")
+        .select("user_id, display_name, total_xp, avatar_url")
+        .order("total_xp", { ascending: false })
+        .limit(50)
+        .then(({ data }) => {
+          setPlayers(data || []);
+          setLoading(false);
+        })
+        .catch(() => setLoading(false));
+
+    fetchPlayers();
+    const channel = supabase
+      .channel("leaderboard-profiles")
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
+        fetchPlayers();
       })
-      .catch(() => setLoading(false));
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   return (
@@ -83,6 +97,10 @@ const Leaderboard = () => {
                       <span className="w-7 text-center text-xs font-semibold">
                         {badge ?? rank}
                       </span>
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={p.avatar_url ?? undefined} alt="avatar" />
+                        <AvatarFallback>{getDisplayName(p).slice(0, 1)}</AvatarFallback>
+                      </Avatar>
                       <div className="flex flex-col">
                         <span className="text-foreground truncate max-w-[160px]">
                           {getDisplayName(p)}
