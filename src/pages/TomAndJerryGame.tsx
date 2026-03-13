@@ -187,8 +187,15 @@ const TomAndJerryGame = () => {
     hard: 0,
   });
   const [progressLoaded, setProgressLoaded] = useState(false);
-  const [userStats, setUserStats] = useState<UserStats>({ totalXp: 0, byGame: {} });
+  const [userStats, setUserStats] = useState<UserStats>({
+    totalXp: 0,
+    streakCount: 0,
+    lastPlayedDate: null,
+    streakRewardClaimedToday: false,
+    byGame: {},
+  });
   const [earnedXpThisWin, setEarnedXpThisWin] = useState(0);
+  const [dailyStreakBonus, setDailyStreakBonus] = useState<{ bonus: number; streakCount: number } | null>(null);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
 
   const maxCompleted = progressByDifficulty[difficulty];
@@ -214,7 +221,13 @@ const TomAndJerryGame = () => {
   const { run: fetchProgressAndXpAction, loading: loadingProgress } = useApiAction(async () => {
     if (!user) {
       setProgressByDifficulty({ easy: 0, medium: 0, hard: 0 });
-      setUserStats({ totalXp: 0, byGame: {} });
+      setUserStats({
+        totalXp: 0,
+        streakCount: 0,
+        lastPlayedDate: null,
+        streakRewardClaimedToday: false,
+        byGame: {},
+      });
       setProgressLoaded(true);
       return;
     }
@@ -292,10 +305,13 @@ const TomAndJerryGame = () => {
 
       if (newMax > prevMax) {
         const xpEarned = getXpForStage(difficulty, completedStage);
-        await addGameXp(user.id, "tom-and-jerry", xpEarned);
+        const streakResult = await addGameXp(user.id, "tom-and-jerry", xpEarned);
         const fresh = await getUserStats(user.id);
         setUserStats(fresh);
         setEarnedXpThisWin(xpEarned);
+        if (streakResult?.awarded) {
+          setDailyStreakBonus({ bonus: streakResult.bonus, streakCount: streakResult.streakCount });
+        }
       }
     }
   );
@@ -309,6 +325,7 @@ const TomAndJerryGame = () => {
 
   useEffect(() => {
     setEarnedXpThisWin(0);
+    setDailyStreakBonus(null);
     setGrid(generateMaze(gridSize, config.wallDensity, mazeSeed));
     setJerry({ x: 0, y: 0 });
     setTom({ x: gridSize - 1, y: 0 });
@@ -608,6 +625,14 @@ const TomAndJerryGame = () => {
                 }
                 {status === "jerry_wins" && earnedXpThisWin > 0 && (
                   <span className="block mt-2 text-primary font-body">+{earnedXpThisWin} نقطة</span>
+                )}
+                {status === "jerry_wins" && dailyStreakBonus && (
+                  <span className="block mt-2 text-amber-500 font-body">
+                    🔥 مكافأة الاستمرارية اليومية +{dailyStreakBonus.bonus}
+                    <span className="block text-xs text-muted-foreground">
+                      الاستمرارية الحالية: {dailyStreakBonus.streakCount} يوم
+                    </span>
+                  </span>
                 )}
               </p>
               <div className="flex flex-wrap gap-3 justify-center">

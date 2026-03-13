@@ -22,7 +22,14 @@ const GENERAL_LABEL = "أسئلة عامة";
 const QuizBattleGame = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [userStats, setUserStats] = useState<UserStats>({ totalXp: 0, byGame: {} });
+  const [userStats, setUserStats] = useState<UserStats>({
+    totalXp: 0,
+    streakCount: 0,
+    lastPlayedDate: null,
+    streakRewardClaimedToday: false,
+    byGame: {},
+  });
+  const [dailyStreakBonus, setDailyStreakBonus] = useState<{ bonus: number; streakCount: number } | null>(null);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
   const [categories, setCategories] = useState<QuizCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
@@ -74,6 +81,7 @@ const QuizBattleGame = () => {
         setGameOver(false);
         setTimeLeft(SECONDS_PER_QUESTION);
         setLocked(false);
+        setDailyStreakBonus(null);
       } catch (e) {
         setQuestionsError(e instanceof Error ? e.message : "فشل تحميل الأسئلة");
       } finally {
@@ -89,9 +97,12 @@ const QuizBattleGame = () => {
       if (user && finalScore > 0) {
         const multiplier = diff === "easy" ? 1 : diff === "medium" ? 2 : 3;
         const xpEarned = finalScore * multiplier;
-        await addGameXp(user.id, "quiz-battle", xpEarned);
+        const streakResult = await addGameXp(user.id, "quiz-battle", xpEarned);
         const fresh = await getUserStats(user.id);
         setUserStats(fresh);
+        if (streakResult?.awarded) {
+          setDailyStreakBonus({ bonus: streakResult.bonus, streakCount: streakResult.streakCount });
+        }
       }
     },
     [user]
@@ -320,6 +331,14 @@ const QuizBattleGame = () => {
                     return score * multiplier;
                   })()}
                 </p>
+                {dailyStreakBonus && (
+                  <p className="mb-4 text-sm font-body text-amber-500">
+                    🔥 مكافأة الاستمرارية اليومية +{dailyStreakBonus.bonus}
+                    <span className="block text-xs text-muted-foreground">
+                      الاستمرارية الحالية: {dailyStreakBonus.streakCount} يوم
+                    </span>
+                  </p>
+                )}
                 <div className="flex flex-wrap justify-center gap-2">
                   <Button variant="outline" onClick={() => startGame(selectedCategory)}>
                     <RotateCcw className="w-4 h-4 ml-1" /> {selectedCategory === null ? GENERAL_LABEL : "نفس الفئة"}

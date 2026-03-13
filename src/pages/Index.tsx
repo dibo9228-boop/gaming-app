@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Gamepad2, Zap, Trophy, LogIn, LogOut, Crown } from "lucide-react";
@@ -60,6 +60,35 @@ const Index = () => {
     getUserStats(user.id).then(setUserStats).catch(() => {});
   }, [user]);
 
+  const streakGuide = useMemo(() => {
+    if (!userStats) return null;
+
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    const todayStr = today.toISOString().slice(0, 10);
+    const yesterdayStr = yesterday.toISOString().slice(0, 10);
+    const last = userStats.lastPlayedDate;
+    const claimedToday = userStats.streakRewardClaimedToday || last === todayStr;
+
+    const nextStreak =
+      claimedToday
+        ? userStats.streakCount + 1
+        : last === yesterdayStr
+          ? userStats.streakCount + 1
+          : 1;
+
+    const days = ["اليوم", "غدًا", "بعد غد", "اليوم 4", "اليوم 5", "اليوم 6", "اليوم 7"];
+    const rewards = Array.from({ length: 7 }).map((_, i) => ({
+      label: claimedToday ? (i === 0 ? "غدًا" : `بعد ${i + 1} أيام`) : days[i],
+      streak: nextStreak + i,
+      bonus: (nextStreak + i) * 10,
+      isToday: !claimedToday && i === 0,
+    }));
+
+    return { claimedToday, rewards };
+  }, [userStats]);
+
   return (
     <div className="min-h-screen bg-background" dir="rtl">
       {/* Auth Bar */}
@@ -81,6 +110,7 @@ const Index = () => {
                   <Trophy className="h-4 w-4" />
                 </Button>
                 <span className="text-sm text-primary font-body">نقاط: {userStats.totalXp}</span>
+                <span className="text-sm text-amber-500 font-body">🔥 {userStats.streakCount} يوم استمرارية</span>
               </>
             )}
             <span className="text-sm text-muted-foreground font-body">{user.email}</span>
@@ -123,6 +153,40 @@ const Index = () => {
            </motion.div>
         </div>
       </section>
+
+      {user && userStats && streakGuide && (
+        <section className="max-w-5xl mx-auto px-4 pb-8">
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5">
+            <h2 className="text-sm md:text-base arcade-text text-amber-500 mb-2">
+              🔥 مكافأة الاستمرارية اليومية
+            </h2>
+            <p className="text-sm text-muted-foreground font-body mb-3">
+              العب أي لعبة مرة واحدة يوميًا لتحصل على مكافأة الاستمرارية. إذا قطعت يوم، الاستمرارية ترجع من 1.
+            </p>
+            <p className="text-sm font-body mb-4">
+              {streakGuide.claimedToday
+                ? "✅ مكافأة اليوم انحسبت. العب بكرا لزيادة الاستمرارية."
+                : "🎯 المطلوب اليوم: انهي لعبة واحدة لتحصل على مكافأة اليوم."}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+              {streakGuide.rewards.map((r) => (
+                <div
+                  key={`${r.label}-${r.streak}`}
+                  className={`rounded-md border p-3 text-sm font-body ${
+                    r.isToday
+                      ? "border-amber-500/60 bg-amber-500/10"
+                      : "border-border bg-card"
+                  }`}
+                >
+                  <p className="text-muted-foreground">{r.label}</p>
+                  <p className="text-foreground">الاستمرارية: {r.streak} يوم</p>
+                  <p className="text-amber-500">+{r.bonus} نقطة</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Games Grid */}
       <section className="max-w-5xl mx-auto px-4 pb-20">

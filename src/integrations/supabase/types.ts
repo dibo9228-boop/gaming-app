@@ -329,6 +329,9 @@ export type Database = {
           created_at: string
           display_name: string
           id: string
+          last_played_date: string | null
+          streak_count: number
+          streak_reward_claimed_today: boolean
           total_xp: number
           updated_at: string
           user_id: string
@@ -338,6 +341,9 @@ export type Database = {
           created_at?: string
           display_name?: string
           id?: string
+          last_played_date?: string | null
+          streak_count?: number
+          streak_reward_claimed_today?: boolean
           total_xp?: number
           updated_at?: string
           user_id: string
@@ -347,6 +353,9 @@ export type Database = {
           created_at?: string
           display_name?: string
           id?: string
+          last_played_date?: string | null
+          streak_count?: number
+          streak_reward_claimed_today?: boolean
           total_xp?: number
           updated_at?: string
           user_id?: string
@@ -388,7 +397,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      apply_game_rewards: {
+        Args: {
+          p_user_id: string
+          p_game_id: string
+          p_xp_delta: number
+        }
+        Returns: {
+          streak_awarded: boolean
+          streak_bonus: number
+          streak_count: number
+          total_xp: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

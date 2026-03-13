@@ -40,8 +40,15 @@ const MemoryMatchGame = () => {
 
   const [progressByDifficulty, setProgressByDifficulty] = useState<ProgressByDifficulty>({ easy: 0, medium: 0, hard: 0 });
   const [progressLoaded, setProgressLoaded] = useState(false);
-  const [userStats, setUserStats] = useState<UserStats>({ totalXp: 0, byGame: {} });
+  const [userStats, setUserStats] = useState<UserStats>({
+    totalXp: 0,
+    streakCount: 0,
+    lastPlayedDate: null,
+    streakRewardClaimedToday: false,
+    byGame: {},
+  });
   const [earnedXpThisWin, setEarnedXpThisWin] = useState(0);
+  const [dailyStreakBonus, setDailyStreakBonus] = useState<{ bonus: number; streakCount: number } | null>(null);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
 
   const maxCompleted = progressByDifficulty[difficulty] ?? 0;
@@ -61,7 +68,13 @@ const MemoryMatchGame = () => {
   const { run: fetchProgressAndXp, loading: loadingProgress } = useApiAction(async () => {
     if (!user) {
       setProgressByDifficulty({ easy: 0, medium: 0, hard: 0 });
-      setUserStats({ totalXp: 0, byGame: {} });
+      setUserStats({
+        totalXp: 0,
+        streakCount: 0,
+        lastPlayedDate: null,
+        streakRewardClaimedToday: false,
+        byGame: {},
+      });
       setProgressLoaded(true);
       return;
     }
@@ -106,16 +119,19 @@ const MemoryMatchGame = () => {
     }
     setProgressByDifficulty((p) => ({ ...p, [difficulty]: newMax }));
     const xp = getXpForStage(difficulty, newMax);
-    await addGameXp(user.id, "memory-match", xp);
+    const streakResult = await addGameXp(user.id, "memory-match", xp);
     const fresh = await getUserStats(user.id);
     setUserStats(fresh);
     setEarnedXpThisWin(xp);
+    if (streakResult?.awarded) {
+      setDailyStreakBonus({ bonus: streakResult.bonus, streakCount: streakResult.streakCount });
+    }
   });
 
   useEffect(() => {
     setProgressLoaded(false);
     fetchProgressAndXp().catch(() => setProgressLoaded(true));
-  }, []);
+  }, [fetchProgressAndXp]);
 
   useEffect(() => {
     if (!progressLoaded) return;
@@ -135,6 +151,7 @@ const MemoryMatchGame = () => {
     setBusy(false);
     lockRef.current = false;
     setEarnedXpThisWin(0);
+    setDailyStreakBonus(null);
   }, [difficulty, stage]);
 
   useEffect(() => {
@@ -270,6 +287,14 @@ const MemoryMatchGame = () => {
                 <p className="mb-4 text-sm text-muted-foreground font-body">
                   النتيجة: {playerScore} - {botScore}
                   {status === "player_wins" && earnedXpThisWin > 0 && <span className="block mt-1 text-primary">+{earnedXpThisWin} نقطة</span>}
+                  {status === "player_wins" && dailyStreakBonus && (
+                    <span className="block mt-2 text-amber-500">
+                      🔥 مكافأة الاستمرارية اليومية +{dailyStreakBonus.bonus}
+                      <span className="block text-xs text-muted-foreground">
+                        الاستمرارية الحالية: {dailyStreakBonus.streakCount} يوم
+                      </span>
+                    </span>
+                  )}
                 </p>
                 <div className="flex flex-wrap justify-center gap-2">
                   {status === "player_wins" && stage < STAGES_PER_LEVEL && (

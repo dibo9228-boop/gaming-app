@@ -10,71 +10,106 @@ export type GameStats = {
 
 export type UserStats = {
   totalXp: number;
+  streakCount: number;
+  lastPlayedDate: string | null;
+  streakRewardClaimedToday: boolean;
   byGame: Record<string, GameStats>;
 };
 
-async function ensureProfile(userId: string): Promise<number> {
+export type DailyStreakResult = {
+  awarded: boolean;
+  bonus: number;
+  streakCount: number;
+};
+
+async function ensureProfile(userId: string): Promise<{
+  totalXp: number;
+  streakCount: number;
+  lastPlayedDate: string | null;
+  streakRewardClaimedToday: boolean;
+}> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("total_xp")
+    .select("total_xp, streak_count, last_played_date, streak_reward_claimed_today")
     .eq("user_id", userId)
     .maybeSingle();
 
   if (error) throw error;
-  if (data) return data.total_xp ?? 0;
+  if (data) {
+    return {
+      totalXp: data.total_xp ?? 0,
+      streakCount: data.streak_count ?? 0,
+      lastPlayedDate: data.last_played_date ?? null,
+      streakRewardClaimedToday: data.streak_reward_claimed_today ?? false,
+    };
+  }
 
   const fallbackName = `player-${userId.slice(0, 8)}`;
   const { data: inserted, error: insertErr } = await supabase
     .from("profiles")
-    .insert({ user_id: userId, display_name: fallbackName, total_xp: 0 })
-    .select("total_xp")
+    .insert({ user_id: userId, display_name: fallbackName, total_xp: 0, streak_count: 0 })
+    .select("total_xp, streak_count")
     .single();
 
   if (insertErr) throw insertErr;
-  return inserted?.total_xp ?? 0;
+  return {
+    totalXp: inserted?.total_xp ?? 0,
+    streakCount: inserted?.streak_count ?? 0,
+    lastPlayedDate: null,
+    streakRewardClaimedToday: false,
+  };
 }
 
-export async function addGameXp(userId: string, gameId: GameId, xpDelta: number) {
-  if (!userId || xpDelta <= 0) return;
+export async function addGameXp(
+  userId: string,
+  gameId: GameId,
+  xpDelta: number
+): Promise<DailyStreakResult | null> {
+  if (!userId || xpDelta <= 0) return null;
 
-  // 1. Ensure profile exists then update total_xp
-  const currentTotal = await ensureProfile(userId);
+  // Ensure profile row exists before calling RPC.
+  await ensureProfile(userId);
 
-  const { error: profileUpdateErr } = await supabase
-    .from("profiles")
-    .update({ total_xp: currentTotal + xpDelta })
-    .eq("user_id", userId);
+  const { data, error } = await supabase.rpc("apply_game_rewards", {
+    p_user_id: userId,
+    p_game_id: gameId,
+    p_xp_delta: xpDelta,
+  });
 
-  if (profileUpdateErr) throw profileUpdateErr;
+  if (error) throw error;
 
-  // 2. Update per-game XP — explicit select then insert/update (avoids upsert+RLS issues)
-  const { data: existing } = await supabase
-    .from("user_game_stats")
-    .select("xp")
-    .eq("user_id", userId)
-    .eq("game_id", gameId)
-    .maybeSingle();
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
 
-  if (existing) {
-    await supabase
-      .from("user_game_stats")
-      .update({ xp: existing.xp + xpDelta })
-      .eq("user_id", userId)
-      .eq("game_id", gameId);
-  } else {
-    await supabase
-      .from("user_game_stats")
-      .insert({ user_id: userId, game_id: gameId, xp: xpDelta });
-  }
+  return {
+    awarded: Boolean(row.streak_awarded),
+    bonus: Number(row.streak_bonus ?? 0),
+    streakCount: Number(row.streak_count ?? 0),
+  };
 }
 
 export async function getUserStats(userId: string): Promise<UserStats> {
-  if (!userId) return { totalXp: 0, byGame: {} };
+  if (!userId) {
+    return {
+      totalXp: 0,
+      streakCount: 0,
+      lastPlayedDate: null,
+      streakRewardClaimedToday: false,
+      byGame: {},
+    };
+  }
 
-  const totalXp = await ensureProfile(userId);
+  const profile = await ensureProfile(userId);
 
-  const [profileRes, statsRes] = await Promise.all([
-    Promise.resolve({ data: { total_xp: totalXp } }),
+  const [, statsRes] = await Promise.all([
+    Promise.resolve({
+      data: {
+        total_xp: profile.totalXp,
+        streak_count: profile.streakCount,
+        last_played_date: profile.lastPlayedDate,
+        streak_reward_claimed_today: profile.streakRewardClaimedToday,
+      },
+    }),
     supabase
       .from("user_game_stats")
       .select("game_id, xp, wins, plays")
@@ -87,7 +122,10 @@ export async function getUserStats(userId: string): Promise<UserStats> {
   }
 
   return {
-    totalXp: profileRes.data?.total_xp ?? 0,
+    totalXp: profile.totalXp,
+    streakCount: profile.streakCount,
+    lastPlayedDate: profile.lastPlayedDate,
+    streakRewardClaimedToday: profile.streakRewardClaimedToday,
     byGame,
   };
 }
