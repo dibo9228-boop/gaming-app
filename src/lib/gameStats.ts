@@ -10,6 +10,8 @@ export type GameStats = {
 
 export type UserStats = {
   totalXp: number;
+  xp: number;
+  level: number;
   streakCount: number;
   lastPlayedDate: string | null;
   streakRewardClaimedToday: boolean;
@@ -20,6 +22,10 @@ export type DailyStreakResult = {
   awarded: boolean;
   bonus: number;
   streakCount: number;
+  xp: number;
+  level: number;
+  levelUp: boolean;
+  unlockedFeatures: string[];
 };
 
 export type DailyChallengeGameType = "memory" | "quiz" | "tom_and_jerry";
@@ -47,13 +53,15 @@ export type DailyChallengeUpdateResult = {
 
 async function ensureProfile(userId: string): Promise<{
   totalXp: number;
+  xp: number;
+  level: number;
   streakCount: number;
   lastPlayedDate: string | null;
   streakRewardClaimedToday: boolean;
 }> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("total_xp, streak_count, last_played_date, streak_reward_claimed_today")
+    .select("total_xp, xp, level, streak_count, last_played_date, streak_reward_claimed_today")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -61,6 +69,8 @@ async function ensureProfile(userId: string): Promise<{
   if (data) {
     return {
       totalXp: data.total_xp ?? 0,
+      xp: data.xp ?? data.total_xp ?? 0,
+      level: data.level ?? 1,
       streakCount: data.streak_count ?? 0,
       lastPlayedDate: data.last_played_date ?? null,
       streakRewardClaimedToday: data.streak_reward_claimed_today ?? false,
@@ -70,13 +80,15 @@ async function ensureProfile(userId: string): Promise<{
   const fallbackName = `player-${userId.slice(0, 8)}`;
   const { data: inserted, error: insertErr } = await supabase
     .from("profiles")
-    .insert({ user_id: userId, display_name: fallbackName, total_xp: 0, streak_count: 0 })
-    .select("total_xp, streak_count")
+    .insert({ user_id: userId, display_name: fallbackName, total_xp: 0, xp: 0, level: 1, streak_count: 0 })
+    .select("total_xp, xp, level, streak_count")
     .single();
 
   if (insertErr) throw insertErr;
   return {
     totalXp: inserted?.total_xp ?? 0,
+    xp: inserted?.xp ?? 0,
+    level: inserted?.level ?? 1,
     streakCount: inserted?.streak_count ?? 0,
     lastPlayedDate: null,
     streakRewardClaimedToday: false,
@@ -108,6 +120,10 @@ export async function addGameXp(
     awarded: Boolean(row.streak_awarded),
     bonus: Number(row.streak_bonus ?? 0),
     streakCount: Number(row.streak_count ?? 0),
+    xp: Number(row.xp ?? 0),
+    level: Number(row.level ?? 1),
+    levelUp: Boolean(row.level_up),
+    unlockedFeatures: Array.isArray(row.unlocked_features) ? row.unlocked_features : [],
   };
 }
 
@@ -115,6 +131,8 @@ export async function getUserStats(userId: string): Promise<UserStats> {
   if (!userId) {
     return {
       totalXp: 0,
+      xp: 0,
+      level: 1,
       streakCount: 0,
       lastPlayedDate: null,
       streakRewardClaimedToday: false,
@@ -128,6 +146,8 @@ export async function getUserStats(userId: string): Promise<UserStats> {
     Promise.resolve({
       data: {
         total_xp: profile.totalXp,
+        xp: profile.xp,
+        level: profile.level,
         streak_count: profile.streakCount,
         last_played_date: profile.lastPlayedDate,
         streak_reward_claimed_today: profile.streakRewardClaimedToday,
@@ -146,11 +166,36 @@ export async function getUserStats(userId: string): Promise<UserStats> {
 
   return {
     totalXp: profile.totalXp,
+    xp: profile.xp,
+    level: profile.level,
     streakCount: profile.streakCount,
     lastPlayedDate: profile.lastPlayedDate,
     streakRewardClaimedToday: profile.streakRewardClaimedToday,
     byGame,
   };
+}
+
+export type UserUnlockable = {
+  id: string;
+  unlockableType: string;
+  unlockableCode: string;
+  unlockedAt: string;
+};
+
+export async function getUserUnlockables(userId: string): Promise<UserUnlockable[]> {
+  if (!userId) return [];
+  const { data, error } = await supabase
+    .from("user_unlockables")
+    .select("id, unlockable_type, unlockable_code, unlocked_at")
+    .eq("user_id", userId)
+    .order("unlocked_at", { ascending: false });
+  if (error) throw error;
+  return (data || []).map((u) => ({
+    id: u.id,
+    unlockableType: u.unlockable_type,
+    unlockableCode: u.unlockable_code,
+    unlockedAt: u.unlocked_at,
+  }));
 }
 
 export async function getDailyChallengeForUser(

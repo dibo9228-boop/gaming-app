@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/contexts/AuthContext";
+import { getUserStats, type UserStats } from "@/lib/gameStats";
 import { useToast } from "@/hooks/use-toast";
 import { useApiAction } from "@/hooks/use-api-action";
 import { getCategories, getQuestions, type QuizCategory } from "@/lib/quizData";
@@ -49,6 +50,7 @@ const QuizBattleLobby = () => {
   const [inviteCode, setInviteCode] = useState("");
   const [inviteUsername, setInviteUsername] = useState("");
   const [myRooms, setMyRooms] = useState<Tables<"quiz_battle_rooms">[]>([]);
+  const [userStats, setUserStats] = useState<UserStats | null>(null);
   const [invites, setInvites] = useState<InviteWithDetails[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -182,6 +184,7 @@ const QuizBattleLobby = () => {
     if (!user) return;
     fetchRooms();
     fetchInvites();
+    getUserStats(user.id).then(setUserStats).catch(() => {});
     const ch1 = supabase
       .channel("quiz-lobby-rooms")
       .on("postgres_changes", { event: "*", schema: "public", table: "quiz_battle_rooms" }, () => fetchRooms())
@@ -233,9 +236,12 @@ const QuizBattleLobby = () => {
             <Home className="w-4 h-4 ml-1" /> الرئيسية
           </Button>
           <h1 className="text-xs arcade-text text-accent">❓⚡ لعبة الأسئلة</h1>
-          <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
-            <LogOut className="w-4 h-4 ml-1" /> خروج
-          </Button>
+          <div className="flex items-center gap-2">
+            {userStats && <span className="text-xs text-accent font-body">المستوى: {userStats.level}</span>}
+            <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
+              <LogOut className="w-4 h-4 ml-1" /> خروج
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-4 mb-8">

@@ -22,6 +22,29 @@ export const PROFILE_COLORS = [
   "#3b82f6",
 ];
 
-export function getLevelFromXp(totalXp: number): number {
-  return Math.max(1, Math.floor(totalXp / 100) + 1);
+const LEVEL_THRESHOLDS = [0, 100, 300, 600, 1000, 1500, 2100];
+
+export function getLevelFromXp(xp: number): number {
+  if (xp >= 2100) return 7;
+  if (xp >= 1500) return 6;
+  if (xp >= 1000) return 5;
+  if (xp >= 600) return 4;
+  if (xp >= 300) return 3;
+  if (xp >= 100) return 2;
+  return 1;
+}
+
+export function getLevelProgress(xp: number) {
+  const level = getLevelFromXp(xp);
+  const currentMin = LEVEL_THRESHOLDS[level - 1] ?? 0;
+  const nextLevelXp = LEVEL_THRESHOLDS[level] ?? null;
+  const progressPercent =
+    nextLevelXp == null ? 100 : Math.min(100, ((xp - currentMin) / (nextLevelXp - currentMin)) * 100);
+  return {
+    level,
+    currentXp: xp,
+    currentMin,
+    nextLevelXp,
+    progressPercent,
+  };
 }

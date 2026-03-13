@@ -29,6 +29,8 @@ const QuizBattleGame = () => {
   const { user } = useAuth();
   const [userStats, setUserStats] = useState<UserStats>({
     totalXp: 0,
+    xp: 0,
+    level: 1,
     streakCount: 0,
     lastPlayedDate: null,
     streakRewardClaimedToday: false,
@@ -36,6 +38,7 @@ const QuizBattleGame = () => {
   });
   const [dailyStreakBonus, setDailyStreakBonus] = useState<{ bonus: number; streakCount: number } | null>(null);
   const [dailyChallengeBonus, setDailyChallengeBonus] = useState<number | null>(null);
+  const [levelUpNotice, setLevelUpNotice] = useState<{ level: number; features: string[] } | null>(null);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
   const [categories, setCategories] = useState<QuizCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
@@ -89,6 +92,7 @@ const QuizBattleGame = () => {
         setLocked(false);
         setDailyStreakBonus(null);
         setDailyChallengeBonus(null);
+        setLevelUpNotice(null);
       } catch (e) {
         setQuestionsError(e instanceof Error ? e.message : "فشل تحميل الأسئلة");
       } finally {
@@ -115,6 +119,9 @@ const QuizBattleGame = () => {
         setUserStats(fresh);
         if (streakResult?.awarded) {
           setDailyStreakBonus({ bonus: streakResult.bonus, streakCount: streakResult.streakCount });
+        }
+        if (streakResult?.levelUp) {
+          setLevelUpNotice({ level: streakResult.level, features: streakResult.unlockedFeatures });
         }
         if (dailyRes?.bonusAwarded && dailyRes.bonusAwarded > 0) {
           setDailyChallengeBonus(dailyRes.bonusAwarded);
@@ -358,6 +365,16 @@ const QuizBattleGame = () => {
                 {dailyChallengeBonus && (
                   <p className="mb-4 text-sm font-body text-emerald-500">
                     ✅ اكتمل تحدي اليوم +{dailyChallengeBonus} نقطة
+                  </p>
+                )}
+                {levelUpNotice && (
+                  <p className="mb-4 text-sm font-body text-fuchsia-500">
+                    🎉 مبروك! وصلت للمستوى {levelUpNotice.level}
+                    {levelUpNotice.features.length > 0 && (
+                      <span className="block text-xs text-muted-foreground">
+                        تم فتح: {levelUpNotice.features.join("، ")}
+                      </span>
+                    )}
                   </p>
                 )}
                 <div className="flex flex-wrap justify-center gap-2">

@@ -6,6 +6,7 @@ import { Check, Copy, Home, Info, Link, Link2, LogOut, Plus, Send, Trash2 } from
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/contexts/AuthContext";
+import { getUserStats, type UserStats } from "@/lib/gameStats";
 import { useToast } from "@/hooks/use-toast";
 import { useApiAction } from "@/hooks/use-api-action";
 import { generateDeck } from "@/lib/memoryMatch";
@@ -50,6 +51,7 @@ const MemoryLobby = () => {
   const [inviteCode, setInviteCode] = useState("");
   const [inviteUsername, setInviteUsername] = useState("");
   const [myRooms, setMyRooms] = useState<Tables<"memory_match_rooms">[]>([]);
+  const [userStats, setUserStats] = useState<UserStats | null>(null);
   const [invites, setInvites] = useState<InviteWithDetails[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [progressByDifficulty, setProgressByDifficulty] = useState<Record<Difficulty, number>>({
@@ -228,6 +230,7 @@ const MemoryLobby = () => {
     fetchRooms();
     fetchInvites();
     fetchProgress();
+    getUserStats(user.id).then(setUserStats).catch(() => {});
     const ch1 = supabase
       .channel("memory-lobby-rooms")
       .on("postgres_changes", { event: "*", schema: "public", table: "memory_match_rooms" }, () => fetchRooms())
@@ -279,9 +282,12 @@ const MemoryLobby = () => {
             <Home className="w-4 h-4 ml-1" /> الرئيسية
           </Button>
           <h1 className="text-xs arcade-text text-accent">🧠 لعبة الذاكرة</h1>
-          <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
-            <LogOut className="w-4 h-4 ml-1" /> خروج
-          </Button>
+          <div className="flex items-center gap-2">
+            {userStats && <span className="text-xs text-accent font-body">المستوى: {userStats.level}</span>}
+            <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
+              <LogOut className="w-4 h-4 ml-1" /> خروج
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-4 mb-8">

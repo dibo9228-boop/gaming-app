@@ -194,6 +194,8 @@ const TomAndJerryGame = () => {
   const [progressLoaded, setProgressLoaded] = useState(false);
   const [userStats, setUserStats] = useState<UserStats>({
     totalXp: 0,
+    xp: 0,
+    level: 1,
     streakCount: 0,
     lastPlayedDate: null,
     streakRewardClaimedToday: false,
@@ -202,6 +204,7 @@ const TomAndJerryGame = () => {
   const [earnedXpThisWin, setEarnedXpThisWin] = useState(0);
   const [dailyStreakBonus, setDailyStreakBonus] = useState<{ bonus: number; streakCount: number } | null>(null);
   const [dailyChallengeBonus, setDailyChallengeBonus] = useState<number | null>(null);
+  const [levelUpNotice, setLevelUpNotice] = useState<{ level: number; features: string[] } | null>(null);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
 
   const maxCompleted = progressByDifficulty[difficulty];
@@ -229,6 +232,8 @@ const TomAndJerryGame = () => {
       setProgressByDifficulty({ easy: 0, medium: 0, hard: 0 });
       setUserStats({
         totalXp: 0,
+        xp: 0,
+        level: 1,
         streakCount: 0,
         lastPlayedDate: null,
         streakRewardClaimedToday: false,
@@ -318,6 +323,9 @@ const TomAndJerryGame = () => {
         if (streakResult?.awarded) {
           setDailyStreakBonus({ bonus: streakResult.bonus, streakCount: streakResult.streakCount });
         }
+        if (streakResult?.levelUp) {
+          setLevelUpNotice({ level: streakResult.level, features: streakResult.unlockedFeatures });
+        }
       }
     }
   );
@@ -333,6 +341,7 @@ const TomAndJerryGame = () => {
     setEarnedXpThisWin(0);
     setDailyStreakBonus(null);
     setDailyChallengeBonus(null);
+    setLevelUpNotice(null);
     setGrid(generateMaze(gridSize, config.wallDensity, mazeSeed));
     setJerry({ x: 0, y: 0 });
     setTom({ x: gridSize - 1, y: 0 });
@@ -669,6 +678,16 @@ const TomAndJerryGame = () => {
                 {dailyChallengeBonus && (
                   <span className="block mt-2 text-emerald-500 font-body">
                     ✅ اكتمل تحدي اليوم +{dailyChallengeBonus} نقطة
+                  </span>
+                )}
+                {levelUpNotice && (
+                  <span className="block mt-2 text-fuchsia-500 font-body">
+                    🎉 مبروك! وصلت للمستوى {levelUpNotice.level}
+                    {levelUpNotice.features.length > 0 && (
+                      <span className="block text-xs text-muted-foreground">
+                        تم فتح: {levelUpNotice.features.join("، ")}
+                      </span>
+                    )}
                   </span>
                 )}
               </p>

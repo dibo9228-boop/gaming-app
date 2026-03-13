@@ -472,6 +472,7 @@ const GameLobby = () => {
                   <Trophy className="h-4 w-4" />
                 </Button>
                 <span className="text-xs text-primary font-body">نقاط: {userStats.totalXp}</span>
+                <span className="text-xs text-accent font-body">المستوى: {userStats.level}</span>
               </>
             )}
             <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">

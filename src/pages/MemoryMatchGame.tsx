@@ -47,6 +47,8 @@ const MemoryMatchGame = () => {
   const [progressLoaded, setProgressLoaded] = useState(false);
   const [userStats, setUserStats] = useState<UserStats>({
     totalXp: 0,
+    xp: 0,
+    level: 1,
     streakCount: 0,
     lastPlayedDate: null,
     streakRewardClaimedToday: false,
@@ -55,6 +57,7 @@ const MemoryMatchGame = () => {
   const [earnedXpThisWin, setEarnedXpThisWin] = useState(0);
   const [dailyStreakBonus, setDailyStreakBonus] = useState<{ bonus: number; streakCount: number } | null>(null);
   const [dailyChallengeBonus, setDailyChallengeBonus] = useState<number | null>(null);
+  const [levelUpNotice, setLevelUpNotice] = useState<{ level: number; features: string[] } | null>(null);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
 
   const maxCompleted = progressByDifficulty[difficulty] ?? 0;
@@ -76,6 +79,8 @@ const MemoryMatchGame = () => {
       setProgressByDifficulty({ easy: 0, medium: 0, hard: 0 });
       setUserStats({
         totalXp: 0,
+        xp: 0,
+        level: 1,
         streakCount: 0,
         lastPlayedDate: null,
         streakRewardClaimedToday: false,
@@ -132,6 +137,9 @@ const MemoryMatchGame = () => {
     if (streakResult?.awarded) {
       setDailyStreakBonus({ bonus: streakResult.bonus, streakCount: streakResult.streakCount });
     }
+    if (streakResult?.levelUp) {
+      setLevelUpNotice({ level: streakResult.level, features: streakResult.unlockedFeatures });
+    }
   });
 
   useEffect(() => {
@@ -159,6 +167,7 @@ const MemoryMatchGame = () => {
     setEarnedXpThisWin(0);
     setDailyStreakBonus(null);
     setDailyChallengeBonus(null);
+    setLevelUpNotice(null);
   }, [difficulty, stage]);
 
   useEffect(() => {
@@ -331,6 +340,16 @@ const MemoryMatchGame = () => {
                   {dailyChallengeBonus && (
                     <span className="block mt-2 text-emerald-500">
                       ✅ اكتمل تحدي اليوم +{dailyChallengeBonus} نقطة
+                    </span>
+                  )}
+                  {levelUpNotice && (
+                    <span className="block mt-2 text-fuchsia-500">
+                      🎉 مبروك! وصلت للمستوى {levelUpNotice.level}
+                      {levelUpNotice.features.length > 0 && (
+                        <span className="block text-xs text-muted-foreground">
+                          تم فتح: {levelUpNotice.features.join("، ")}
+                        </span>
+                      )}
                     </span>
                   )}
                 </p>

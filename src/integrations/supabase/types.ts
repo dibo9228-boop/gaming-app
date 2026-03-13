@@ -387,12 +387,14 @@ export type Database = {
           display_name: string
           id: string
           last_played_date: string | null
+          level: number
           profile_color: string | null
           streak_count: number
           streak_reward_claimed_today: boolean
           total_xp: number
           updated_at: string
           user_id: string
+          xp: number
         }
         Insert: {
           avatar_url?: string | null
@@ -400,12 +402,14 @@ export type Database = {
           display_name?: string
           id?: string
           last_played_date?: string | null
+          level?: number
           profile_color?: string | null
           streak_count?: number
           streak_reward_claimed_today?: boolean
           total_xp?: number
           updated_at?: string
           user_id: string
+          xp?: number
         }
         Update: {
           avatar_url?: string | null
@@ -413,12 +417,38 @@ export type Database = {
           display_name?: string
           id?: string
           last_played_date?: string | null
+          level?: number
           profile_color?: string | null
           streak_count?: number
           streak_reward_claimed_today?: boolean
           total_xp?: number
           updated_at?: string
           user_id?: string
+          xp?: number
+        }
+        Relationships: []
+      }
+      user_unlockables: {
+        Row: {
+          id: string
+          user_id: string
+          unlockable_type: string
+          unlockable_code: string
+          unlocked_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          unlockable_type: string
+          unlockable_code: string
+          unlocked_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          unlockable_type?: string
+          unlockable_code?: string
+          unlocked_at?: string
         }
         Relationships: []
       }
@@ -514,7 +544,17 @@ export type Database = {
           streak_bonus: number
           streak_count: number
           total_xp: number
+          xp: number
+          level: number
+          level_up: boolean
+          unlocked_features: string[]
         }[]
+      }
+      get_level_from_xp: {
+        Args: {
+          p_xp: number
+        }
+        Returns: number
       }
     }
     Enums: {

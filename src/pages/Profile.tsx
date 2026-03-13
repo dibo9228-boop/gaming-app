@@ -4,13 +4,14 @@ import { Home, Save, Upload, UserCircle2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { getUnlockedCount } from "@/lib/achievements";
-import { getUserStats, type UserStats } from "@/lib/gameStats";
-import { PRESET_AVATARS, PROFILE_COLORS, getLevelFromXp } from "@/lib/profile";
+import { getUserStats, getUserUnlockables, type UserStats, type UserUnlockable } from "@/lib/gameStats";
+import { PRESET_AVATARS, PROFILE_COLORS, getLevelProgress } from "@/lib/profile";
 
 type ProfileRow = {
   display_name: string;
@@ -33,6 +34,7 @@ const Profile = () => {
   const [stats, setStats] = useState<UserStats | null>(null);
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [rank, setRank] = useState<number | null>(null);
+  const [unlockables, setUnlockables] = useState<UserUnlockable[]>([]);
 
   const [displayName, setDisplayName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -54,6 +56,7 @@ const Profile = () => {
             .single(),
           getUserStats(user.id),
         ]);
+        const unlocked = await getUserUnlockables(user.id);
 
         const p = profileRes.data;
         if (p) {
@@ -63,6 +66,7 @@ const Profile = () => {
           setProfileColor(p.profile_color ?? null);
         }
         setStats(userStats);
+        setUnlockables(unlocked);
 
         const { count } = await supabase
           .from("profiles")
@@ -92,6 +96,7 @@ const Profile = () => {
               .single(),
             getUserStats(user.id),
           ]);
+          const unlocked = await getUserUnlockables(user.id);
           if (profileRes.data) {
             setProfile(profileRes.data);
             setDisplayName(profileRes.data.display_name ?? "");
@@ -99,6 +104,7 @@ const Profile = () => {
             setProfileColor(profileRes.data.profile_color ?? null);
           }
           setStats(userStats);
+          setUnlockables(unlocked);
         }
       )
       .subscribe();
@@ -108,7 +114,8 @@ const Profile = () => {
     };
   }, [user?.id]);
 
-  const level = useMemo(() => getLevelFromXp(stats?.totalXp ?? 0), [stats?.totalXp]);
+  const level = useMemo(() => stats?.level ?? 1, [stats?.level]);
+  const levelProgress = useMemo(() => getLevelProgress(stats?.xp ?? 0), [stats?.xp]);
   const unlockedAchievements = useMemo(
     () => (stats ? getUnlockedCount(stats) : 0),
     [stats]
@@ -202,10 +209,44 @@ const Profile = () => {
                 <div className="space-y-1 font-body text-sm">
                   <p>اسم المستخدم: <span className="text-foreground">{profile?.display_name ?? "—"}</span></p>
                   <p>المستوى: <span className="text-primary">{level}</span></p>
+                  <div className="space-y-1">
+                    <p>تقدم المستوى: <span className="text-muted-foreground">{levelProgress.currentXp} / {levelProgress.nextLevelXp ?? "MAX"} XP</span></p>
+                    <Progress value={levelProgress.progressPercent} className="h-2 w-56" />
+                  </div>
                   <p>النقاط الكلية: <span className="text-primary">{stats?.totalXp ?? 0}</span></p>
+                  <p>XP اللعب: <span className="text-primary">{stats?.xp ?? 0}</span></p>
                   <p>الاستمرارية: <span className="text-amber-500">🔥 {stats?.streakCount ?? 0} يوم</span></p>
                   <p>الإنجازات المفتوحة: <span className="text-accent">{unlockedAchievements}</span></p>
                   <p>ترتيبك: <span className="text-accent">#{rank ?? "—"}</span></p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-sm arcade-text text-foreground">الميزات المفتوحة</p>
+                {unlockables.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">لا توجد ميزات إضافية بعد. استمر باللعب لفتحها.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {unlockables.map((u) => (
+                      <span key={u.id} className="text-xs rounded-full border border-primary/40 bg-primary/10 px-2 py-1">
+                        {u.unlockableCode}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-body">
+                  <div className={`rounded border p-2 ${level >= 4 ? "border-primary/40 bg-primary/10" : "border-border opacity-60"}`}>
+                    {level >= 4 ? "✅" : "🔒"} تحديات أسرع (المستوى 4)
+                  </div>
+                  <div className={`rounded border p-2 ${level >= 5 ? "border-primary/40 bg-primary/10" : "border-border opacity-60"}`}>
+                    {level >= 5 ? "✅" : "🔒"} بطولات صغيرة (المستوى 5)
+                  </div>
+                  <div className={`rounded border p-2 ${level >= 6 ? "border-primary/40 bg-primary/10" : "border-border opacity-60"}`}>
+                    {level >= 6 ? "✅" : "🔒"} ثيمات إضافية (المستوى 6)
+                  </div>
+                  <div className={`rounded border p-2 ${level >= 7 ? "border-primary/40 bg-primary/10" : "border-border opacity-60"}`}>
+                    {level >= 7 ? "✅" : "🔒"} ميزات مميزة + أفاتار خاص (المستوى 7)
+                  </div>
                 </div>
               </div>
 

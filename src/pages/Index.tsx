@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Gamepad2, Zap, Trophy, LogIn, LogOut, Crown, UserCircle2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { AchievementsDialog } from "@/components/AchievementsDialog";
 import {
   getDailyChallengeForUser,
@@ -11,6 +12,7 @@ import {
   type DailyChallengeInfo,
   type UserStats,
 } from "@/lib/gameStats";
+import { getLevelProgress } from "@/lib/profile";
 
 const games = [
   {
@@ -123,6 +125,20 @@ const Index = () => {
     return `العب ${dailyChallenge.targetValue} مباراة في ${gameLabel}`;
   }, [dailyChallenge]);
 
+  const levelProgress = useMemo(() => {
+    if (!userStats) return null;
+    return getLevelProgress(userStats.xp);
+  }, [userStats?.xp]);
+
+  const nextUnlockHint = useMemo(() => {
+    if (!userStats) return "";
+    if (userStats.level < 4) return "الوصول للمستوى 4 يفتح: تحديات أسرع";
+    if (userStats.level < 5) return "الوصول للمستوى 5 يفتح: بطولات صغيرة";
+    if (userStats.level < 6) return "الوصول للمستوى 6 يفتح: ثيمات إضافية";
+    if (userStats.level < 7) return "الوصول للمستوى 7 يفتح: أفاتار أسطوري + ميزات مميزة";
+    return "✅ كل المزايا الأساسية مفتوحة";
+  }, [userStats?.level]);
+
   return (
     <div className="min-h-screen bg-background" dir="rtl">
       {/* Auth Bar */}
@@ -190,6 +206,28 @@ const Index = () => {
            </motion.div>
         </div>
       </section>
+
+      {user && userStats && levelProgress && (
+        <section className="max-w-5xl mx-auto px-4 pb-8">
+          <div className="rounded-xl border border-primary/30 bg-primary/5 p-5">
+            <h2 className="text-sm md:text-base arcade-text text-primary mb-2">📈 تقدمك الآن</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2 font-body text-sm">
+                <p>المستوى الحالي: <span className="text-primary">{userStats.level}</span></p>
+                <p>XP الحالي: <span className="text-primary">{userStats.xp}</span></p>
+                <p className="text-muted-foreground">
+                  التقدم للمستوى التالي: {levelProgress.currentXp} / {levelProgress.nextLevelXp ?? "MAX"}
+                </p>
+                <Progress value={levelProgress.progressPercent} className="h-2" />
+              </div>
+              <div className="rounded-md border border-border bg-card p-3 text-sm font-body">
+                <p className="text-muted-foreground mb-1">الهدف القادم</p>
+                <p className="text-foreground">{nextUnlockHint}</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {user && userStats && streakGuide && (
         <section className="max-w-5xl mx-auto px-4 pb-8">
