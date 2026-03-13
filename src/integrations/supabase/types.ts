@@ -98,6 +98,63 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_challenges: {
+        Row: {
+          id: string
+          game_type: string
+          challenge_type: string
+          target_value: number
+          bonus_points: number
+          date: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          game_type: string
+          challenge_type: string
+          target_value: number
+          bonus_points: number
+          date: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          game_type?: string
+          challenge_type?: string
+          target_value?: number
+          bonus_points?: number
+          date?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      user_daily_challenge_progress: {
+        Row: {
+          id: string
+          user_id: string
+          challenge_id: string
+          progress: number
+          completed: boolean
+          completed_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          challenge_id: string
+          progress?: number
+          completed?: boolean
+          completed_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          challenge_id?: string
+          progress?: number
+          completed?: boolean
+          completed_at?: string | null
+        }
+        Relationships: []
+      }
       memory_match_progress: {
         Row: {
           user_id: string
@@ -397,6 +454,52 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      ensure_daily_challenge: {
+        Args: {
+          p_date?: string
+        }
+        Returns: {
+          id: string
+          game_type: string
+          challenge_type: string
+          target_value: number
+          bonus_points: number
+          date: string
+          created_at: string
+        }
+      }
+      get_daily_challenge_for_user: {
+        Args: {
+          p_user_id: string
+        }
+        Returns: {
+          challenge_id: string
+          game_type: string
+          challenge_type: string
+          target_value: number
+          bonus_points: number
+          challenge_date: string
+          progress: number
+          completed: boolean
+          completed_at: string | null
+        }[]
+      }
+      update_daily_challenge_progress: {
+        Args: {
+          p_user_id: string
+          p_game_type: string
+          p_win?: boolean
+          p_score?: number
+          p_matches_played?: number
+        }
+        Returns: {
+          challenge_id: string
+          progress: number
+          target_value: number
+          completed: boolean
+          bonus_awarded: number
+        }[]
+      }
       apply_game_rewards: {
         Args: {
           p_user_id: string

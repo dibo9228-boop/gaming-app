@@ -5,7 +5,12 @@ import { Gamepad2, Zap, Trophy, LogIn, LogOut, Crown } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { AchievementsDialog } from "@/components/AchievementsDialog";
-import { getUserStats, type UserStats } from "@/lib/gameStats";
+import {
+  getDailyChallengeForUser,
+  getUserStats,
+  type DailyChallengeInfo,
+  type UserStats,
+} from "@/lib/gameStats";
 
 const games = [
   {
@@ -50,14 +55,24 @@ const Index = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const [userStats, setUserStats] = useState<UserStats | null>(null);
+  const [dailyChallenge, setDailyChallenge] = useState<DailyChallengeInfo | null>(null);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
 
   useEffect(() => {
     if (!user) {
       setUserStats(null);
+      setDailyChallenge(null);
       return;
     }
-    getUserStats(user.id).then(setUserStats).catch(() => {});
+    getUserStats(user.id)
+      .then(setUserStats)
+      .catch(() => setUserStats(null));
+
+    // Keep daily challenge optional so streak/profile UI still works
+    // even if the daily-challenge migration/RPC is not applied yet.
+    getDailyChallengeForUser(user.id)
+      .then(setDailyChallenge)
+      .catch(() => setDailyChallenge(null));
   }, [user]);
 
   const streakGuide = useMemo(() => {
@@ -88,6 +103,25 @@ const Index = () => {
 
     return { claimedToday, rewards };
   }, [userStats]);
+
+  const dailyChallengeLabel = useMemo(() => {
+    if (!dailyChallenge) return "";
+
+    const gameLabel =
+      dailyChallenge.gameType === "memory"
+        ? "لعبة الذاكرة"
+        : dailyChallenge.gameType === "quiz"
+          ? "لعبة الأسئلة"
+          : "توم وجيري";
+
+    if (dailyChallenge.challengeType === "win_match") {
+      return `اربح ${dailyChallenge.targetValue} مباراة في ${gameLabel}`;
+    }
+    if (dailyChallenge.challengeType === "score_target") {
+      return `حقق نتيجة ${dailyChallenge.targetValue}+ في ${gameLabel}`;
+    }
+    return `العب ${dailyChallenge.targetValue} مباراة في ${gameLabel}`;
+  }, [dailyChallenge]);
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
@@ -184,6 +218,29 @@ const Index = () => {
                 </div>
               ))}
             </div>
+          </div>
+        </section>
+      )}
+
+      {user && dailyChallenge && (
+        <section className="max-w-5xl mx-auto px-4 pb-8">
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-5">
+            <h2 className="text-sm md:text-base arcade-text text-emerald-500 mb-2">
+              🔥 تحدي اليوم
+            </h2>
+            <p className="text-sm text-muted-foreground font-body mb-2">{dailyChallengeLabel}</p>
+            <p className="text-sm font-body text-emerald-400 mb-3">
+              +{dailyChallenge.bonusPoints} نقطة إضافية
+            </p>
+            <p className="text-sm font-body">
+              التقدم: {Math.min(dailyChallenge.progress, dailyChallenge.targetValue)} / {dailyChallenge.targetValue}
+            </p>
+            {dailyChallenge.completed && (
+              <p className="text-sm font-body text-emerald-500 mt-2">
+                ✅ التحدي مكتمل
+                <span className="block">+{dailyChallenge.bonusPoints} نقطة مكافأة</span>
+              </p>
+            )}
           </div>
         </section>
       )}

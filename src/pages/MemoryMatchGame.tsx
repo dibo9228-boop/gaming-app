@@ -9,7 +9,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useApiAction } from "@/hooks/use-api-action";
 import { Difficulty, generateDeck } from "@/lib/memoryMatch";
-import { addGameXp, getUserStats, type UserStats } from "@/lib/gameStats";
+import {
+  addGameXp,
+  getUserStats,
+  updateDailyChallengeProgress,
+  type UserStats,
+} from "@/lib/gameStats";
 
 const STAGES_PER_LEVEL = 25;
 
@@ -49,6 +54,7 @@ const MemoryMatchGame = () => {
   });
   const [earnedXpThisWin, setEarnedXpThisWin] = useState(0);
   const [dailyStreakBonus, setDailyStreakBonus] = useState<{ bonus: number; streakCount: number } | null>(null);
+  const [dailyChallengeBonus, setDailyChallengeBonus] = useState<number | null>(null);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
 
   const maxCompleted = progressByDifficulty[difficulty] ?? 0;
@@ -152,6 +158,7 @@ const MemoryMatchGame = () => {
     lockRef.current = false;
     setEarnedXpThisWin(0);
     setDailyStreakBonus(null);
+    setDailyChallengeBonus(null);
   }, [difficulty, stage]);
 
   useEffect(() => {
@@ -227,6 +234,32 @@ const MemoryMatchGame = () => {
   }, [status, turn, busy, availableForBot, resolvePair]);
 
   const gameOver = status !== "playing";
+  const dailyChallengeHandledRef = useRef(false);
+
+  useEffect(() => {
+    if (!user) return;
+    if (!gameOver) {
+      dailyChallengeHandledRef.current = false;
+      return;
+    }
+    if (dailyChallengeHandledRef.current) return;
+    dailyChallengeHandledRef.current = true;
+
+    updateDailyChallengeProgress(user.id, {
+      gameType: "memory",
+      win: status === "player_wins",
+      matchesPlayed: 1,
+    })
+      .then(async (res) => {
+        if (res?.bonusAwarded && res.bonusAwarded > 0) {
+          setDailyChallengeBonus(res.bonusAwarded);
+        }
+        const fresh = await getUserStats(user.id);
+        setUserStats(fresh);
+      })
+      .catch(() => {});
+  }, [gameOver, status, user]);
+
   const columns = deck.length <= 12 ? 4 : 5;
 
   return (
@@ -293,6 +326,11 @@ const MemoryMatchGame = () => {
                       <span className="block text-xs text-muted-foreground">
                         الاستمرارية الحالية: {dailyStreakBonus.streakCount} يوم
                       </span>
+                    </span>
+                  )}
+                  {dailyChallengeBonus && (
+                    <span className="block mt-2 text-emerald-500">
+                      ✅ اكتمل تحدي اليوم +{dailyChallengeBonus} نقطة
                     </span>
                   )}
                 </p>

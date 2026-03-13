@@ -8,6 +8,13 @@ import { Button } from "@/components/ui/button";
 
 type Profile = Tables<"profiles">;
 
+function getDisplayName(p: Pick<Profile, "display_name" | "user_id">): string {
+  const raw = (p.display_name ?? "").trim();
+  if (!raw) return "لاعب مجهول";
+  if (raw.startsWith("player-")) return `لاعب ${p.user_id.slice(0, 6)}`;
+  return raw;
+}
+
 const Leaderboard = () => {
   const navigate = useNavigate();
   const [players, setPlayers] = useState<Profile[]>([]);
@@ -78,7 +85,7 @@ const Leaderboard = () => {
                       </span>
                       <div className="flex flex-col">
                         <span className="text-foreground truncate max-w-[160px]">
-                          {p.display_name || "لاعب مجهول"}
+                          {getDisplayName(p)}
                         </span>
                         <span className="text-[11px] text-muted-foreground">
                           XP: {p.total_xp}

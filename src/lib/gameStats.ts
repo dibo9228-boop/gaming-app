@@ -22,6 +22,29 @@ export type DailyStreakResult = {
   streakCount: number;
 };
 
+export type DailyChallengeGameType = "memory" | "quiz" | "tom_and_jerry";
+export type DailyChallengeType = "win_match" | "score_target" | "play_matches";
+
+export type DailyChallengeInfo = {
+  challengeId: string;
+  gameType: DailyChallengeGameType;
+  challengeType: DailyChallengeType;
+  targetValue: number;
+  bonusPoints: number;
+  challengeDate: string;
+  progress: number;
+  completed: boolean;
+  completedAt: string | null;
+};
+
+export type DailyChallengeUpdateResult = {
+  challengeId: string;
+  progress: number;
+  targetValue: number;
+  completed: boolean;
+  bonusAwarded: number;
+};
+
 async function ensureProfile(userId: string): Promise<{
   totalXp: number;
   streakCount: number;
@@ -127,5 +150,66 @@ export async function getUserStats(userId: string): Promise<UserStats> {
     lastPlayedDate: profile.lastPlayedDate,
     streakRewardClaimedToday: profile.streakRewardClaimedToday,
     byGame,
+  };
+}
+
+export async function getDailyChallengeForUser(
+  userId: string
+): Promise<DailyChallengeInfo | null> {
+  if (!userId) return null;
+
+  await ensureProfile(userId);
+  const { data, error } = await supabase.rpc("get_daily_challenge_for_user", {
+    p_user_id: userId,
+  });
+  if (error) throw error;
+
+  const row = Array.isArray(data) ? data[0] : null;
+  if (!row) return null;
+
+  return {
+    challengeId: row.challenge_id,
+    gameType: row.game_type as DailyChallengeGameType,
+    challengeType: row.challenge_type as DailyChallengeType,
+    targetValue: Number(row.target_value ?? 0),
+    bonusPoints: Number(row.bonus_points ?? 0),
+    challengeDate: row.challenge_date,
+    progress: Number(row.progress ?? 0),
+    completed: Boolean(row.completed),
+    completedAt: row.completed_at ?? null,
+  };
+}
+
+export async function updateDailyChallengeProgress(
+  userId: string,
+  params: {
+    gameType: DailyChallengeGameType;
+    win?: boolean;
+    score?: number;
+    matchesPlayed?: number;
+  }
+): Promise<DailyChallengeUpdateResult | null> {
+  if (!userId) return null;
+
+  await ensureProfile(userId);
+  const { data, error } = await supabase.rpc("update_daily_challenge_progress", {
+    p_user_id: userId,
+    p_game_type: params.gameType,
+    p_win: params.win ?? false,
+    p_score: params.score ?? 0,
+    p_matches_played: params.matchesPlayed ?? 1,
+  });
+
+  if (error) throw error;
+
+  const row = Array.isArray(data) ? data[0] : null;
+  if (!row) return null;
+
+  return {
+    challengeId: row.challenge_id,
+    progress: Number(row.progress ?? 0),
+    targetValue: Number(row.target_value ?? 0),
+    completed: Boolean(row.completed),
+    bonusAwarded: Number(row.bonus_awarded ?? 0),
   };
 }

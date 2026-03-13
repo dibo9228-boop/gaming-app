@@ -7,7 +7,12 @@ import { AchievementsDialog } from "@/components/AchievementsDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useApiAction } from "@/hooks/use-api-action";
-import { addGameXp, getUserStats, type UserStats } from "@/lib/gameStats";
+import {
+  addGameXp,
+  getUserStats,
+  updateDailyChallengeProgress,
+  type UserStats,
+} from "@/lib/gameStats";
 
 const STAGES_PER_LEVEL = 25;
 
@@ -196,6 +201,7 @@ const TomAndJerryGame = () => {
   });
   const [earnedXpThisWin, setEarnedXpThisWin] = useState(0);
   const [dailyStreakBonus, setDailyStreakBonus] = useState<{ bonus: number; streakCount: number } | null>(null);
+  const [dailyChallengeBonus, setDailyChallengeBonus] = useState<number | null>(null);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
 
   const maxCompleted = progressByDifficulty[difficulty];
@@ -326,6 +332,7 @@ const TomAndJerryGame = () => {
   useEffect(() => {
     setEarnedXpThisWin(0);
     setDailyStreakBonus(null);
+    setDailyChallengeBonus(null);
     setGrid(generateMaze(gridSize, config.wallDensity, mazeSeed));
     setJerry({ x: 0, y: 0 });
     setTom({ x: gridSize - 1, y: 0 });
@@ -334,6 +341,7 @@ const TomAndJerryGame = () => {
   }, [difficulty, stage]);
 
   const savedProgressRef = useRef<{ stage: number; difficulty: Difficulty } | null>(null);
+  const dailyChallengeHandledRef = useRef(false);
   useEffect(() => {
     if (status === "jerry_wins" && user) {
       const key = `${difficulty}-${stage}`;
@@ -344,6 +352,30 @@ const TomAndJerryGame = () => {
     }
     if (status === "playing") savedProgressRef.current = null;
   }, [status, user, stage, difficulty, saveProgress]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (status === "playing") {
+      dailyChallengeHandledRef.current = false;
+      return;
+    }
+    if (dailyChallengeHandledRef.current) return;
+    dailyChallengeHandledRef.current = true;
+
+    updateDailyChallengeProgress(user.id, {
+      gameType: "tom_and_jerry",
+      win: status === "jerry_wins",
+      matchesPlayed: 1,
+    })
+      .then(async (res) => {
+        if (res?.bonusAwarded && res.bonusAwarded > 0) {
+          setDailyChallengeBonus(res.bonusAwarded);
+        }
+        const fresh = await getUserStats(user.id);
+        setUserStats(fresh);
+      })
+      .catch(() => {});
+  }, [status, user]);
 
   const resetGame = useCallback(() => {
     setEarnedXpThisWin(0);
@@ -632,6 +664,11 @@ const TomAndJerryGame = () => {
                     <span className="block text-xs text-muted-foreground">
                       الاستمرارية الحالية: {dailyStreakBonus.streakCount} يوم
                     </span>
+                  </span>
+                )}
+                {dailyChallengeBonus && (
+                  <span className="block mt-2 text-emerald-500 font-body">
+                    ✅ اكتمل تحدي اليوم +{dailyChallengeBonus} نقطة
                   </span>
                 )}
               </p>

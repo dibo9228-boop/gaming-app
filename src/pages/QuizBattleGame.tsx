@@ -13,7 +13,12 @@ import {
   type QuizQuestion,
   type QuizDifficulty,
 } from "@/lib/quizData";
-import { addGameXp, getUserStats, type UserStats } from "@/lib/gameStats";
+import {
+  addGameXp,
+  getUserStats,
+  updateDailyChallengeProgress,
+  type UserStats,
+} from "@/lib/gameStats";
 
 const QUESTIONS_PER_GAME = 15;
 const SECONDS_PER_QUESTION = 15;
@@ -30,6 +35,7 @@ const QuizBattleGame = () => {
     byGame: {},
   });
   const [dailyStreakBonus, setDailyStreakBonus] = useState<{ bonus: number; streakCount: number } | null>(null);
+  const [dailyChallengeBonus, setDailyChallengeBonus] = useState<number | null>(null);
   const [achievementsOpen, setAchievementsOpen] = useState(false);
   const [categories, setCategories] = useState<QuizCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
@@ -82,6 +88,7 @@ const QuizBattleGame = () => {
         setTimeLeft(SECONDS_PER_QUESTION);
         setLocked(false);
         setDailyStreakBonus(null);
+        setDailyChallengeBonus(null);
       } catch (e) {
         setQuestionsError(e instanceof Error ? e.message : "فشل تحميل الأسئلة");
       } finally {
@@ -94,14 +101,23 @@ const QuizBattleGame = () => {
   const finishGame = useCallback(
     async (finalScore: number, diff: QuizDifficulty) => {
       setGameOver(true);
-      if (user && finalScore > 0) {
+      if (user) {
         const multiplier = diff === "easy" ? 1 : diff === "medium" ? 2 : 3;
         const xpEarned = finalScore * multiplier;
-        const streakResult = await addGameXp(user.id, "quiz-battle", xpEarned);
+        const streakResult =
+          xpEarned > 0 ? await addGameXp(user.id, "quiz-battle", xpEarned) : null;
+        const dailyRes = await updateDailyChallengeProgress(user.id, {
+          gameType: "quiz",
+          score: finalScore,
+          matchesPlayed: 1,
+        });
         const fresh = await getUserStats(user.id);
         setUserStats(fresh);
         if (streakResult?.awarded) {
           setDailyStreakBonus({ bonus: streakResult.bonus, streakCount: streakResult.streakCount });
+        }
+        if (dailyRes?.bonusAwarded && dailyRes.bonusAwarded > 0) {
+          setDailyChallengeBonus(dailyRes.bonusAwarded);
         }
       }
     },
@@ -337,6 +353,11 @@ const QuizBattleGame = () => {
                     <span className="block text-xs text-muted-foreground">
                       الاستمرارية الحالية: {dailyStreakBonus.streakCount} يوم
                     </span>
+                  </p>
+                )}
+                {dailyChallengeBonus && (
+                  <p className="mb-4 text-sm font-body text-emerald-500">
+                    ✅ اكتمل تحدي اليوم +{dailyChallengeBonus} نقطة
                   </p>
                 )}
                 <div className="flex flex-wrap justify-center gap-2">
